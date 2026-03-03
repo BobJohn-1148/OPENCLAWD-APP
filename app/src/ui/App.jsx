@@ -4,6 +4,8 @@ import {
   CalendarDays,
   Mail,
   GraduationCap,
+  Clock,
+  Bot,
   Settings as SettingsIcon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -13,7 +15,9 @@ const tabs = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'calendar', label: 'Calendar', icon: CalendarDays },
   { key: 'inbox', label: 'Inbox', icon: Mail },
-  { key: 'classes', label: 'Classes', icon: GraduationCap },
+  { key: 'assignments', label: 'Assignments', icon: GraduationCap },
+  { key: 'cron', label: 'Cron Jobs', icon: Clock },
+  { key: 'assistant', label: 'Assistant', icon: Bot },
   { key: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -412,8 +416,12 @@ export default function App() {
         return <GlassCard title="Calendar">Google Calendar integration coming next.</GlassCard>;
       case 'inbox':
         return <GlassCard title="Inbox">Gmail viewer + summary panel coming next.</GlassCard>;
-      case 'classes':
-        return <GlassCard title="Classes">Class list + semester archive coming next.</GlassCard>;
+      case 'assignments':
+        return <GlassCard title="Assignments">Blackboard scrape + due-soon list coming next.</GlassCard>;
+      case 'cron':
+        return <GlassCard title="Cron Jobs">Scheduled jobs + next run/last run pulled from OpenClaw coming next.</GlassCard>;
+      case 'assistant':
+        return <GlassCard title="Assistant">Chat UI (bubbles) connected to OpenClaw coming next.</GlassCard>;
       case 'settings':
         return (
           <div className="grid">

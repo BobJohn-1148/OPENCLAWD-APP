@@ -2,13 +2,15 @@
   /* Dark theme (default) */
   --bg0:#070A12;
   --bg1:#0B1020;
-  --glass: rgba(255,255,255,0.07);
+
+  /* more "Apple liquid glass" */
+  --glass: rgba(255,255,255,0.06);
   --glass2: rgba(255,255,255,0.10);
-  --border: rgba(255,255,255,0.12);
+  --border: rgba(255,255,255,0.14);
   --text: rgba(255,255,255,0.92);
   --muted: rgba(255,255,255,0.62);
-  --shadow: 0 10px 40px rgba(0,0,0,0.55);
-  --radius: 18px;
+  --shadow: 0 14px 60px rgba(0,0,0,0.55);
+  --radius: 20px;
   --accent: #7C3AED;
   --accent2: #38BDF8;
 
@@ -43,11 +45,30 @@ body{
 }
 
 .glass{
-  background: linear-gradient(135deg, var(--glass), rgba(255,255,255,0.04));
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02)),
+    linear-gradient(180deg, var(--glass), rgba(255,255,255,0.02));
   border: 1px solid var(--border);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
   box-shadow: var(--shadow);
+}
+
+/* subtle top highlight like iOS panels */
+.glass::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius: inherit;
+  pointer-events:none;
+  background: radial-gradient(900px 120px at 30% 0%, rgba(255,255,255,0.12), transparent 60%);
+  mask: linear-gradient(#000, #000);
+  opacity: 0.9;
+}
+
+.card, .sidebar, .topbar, .drawer{
+  position: relative;
+  overflow: hidden;
 }
 
 .appRoot{

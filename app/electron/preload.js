@@ -20,4 +20,9 @@ contextBridge.exposeInMainWorld('bob', {
   syncSetConfig: ({ enabled, baseUrl }) => ipcRenderer.invoke('sync:setConfig', { enabled, baseUrl }),
   syncRunOnce: () => ipcRenderer.invoke('sync:runOnce'),
   outboxList: (opts) => ipcRenderer.invoke('outbox:list', opts),
+
+  // Notes
+  notesList: (opts) => ipcRenderer.invoke('notes:list', opts),
+  notesClasses: () => ipcRenderer.invoke('notes:classes'),
+  notesUpsert: (payload) => ipcRenderer.invoke('notes:upsert', payload),
 });

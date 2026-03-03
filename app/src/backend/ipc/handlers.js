@@ -71,6 +71,76 @@ function registerIpc({ ipcMain, db, registry }) {
     return res;
   });
 
+
+  // Local class notes
+  ipcMain.handle('notes:list', async (_evt, { classKey, assignmentKey, limit = 200 } = {}) => {
+    const classFilter = typeof classKey === 'string' ? classKey.trim() : '';
+    const assignmentFilter = typeof assignmentKey === 'string' ? assignmentKey.trim() : '';
+    const safeLimit = Math.min(500, Math.max(1, Number(limit) || 200));
+    let rows;
+    if (classFilter && assignmentFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE class_key = ? AND assignment_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(classFilter, assignmentFilter, safeLimit);
+    } else if (classFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE class_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(classFilter, safeLimit);
+    } else if (assignmentFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE assignment_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(assignmentFilter, safeLimit);
+    } else {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes ORDER BY updated_at DESC LIMIT ?')
+        .all(safeLimit);
+    }
+    return rows;
+  });
+
+  ipcMain.handle('notes:classes', async () => {
+    const rows = db
+      .prepare(`
+        SELECT
+          class_key,
+          assignment_key,
+          COUNT(*) AS note_count,
+          MAX(updated_at) AS updated_at
+        FROM class_notes
+        GROUP BY class_key, assignment_key
+        ORDER BY class_key ASC, updated_at DESC
+      `)
+      .all();
+    return rows;
+  });
+
+  ipcMain.handle('notes:upsert', async (_evt, { id, classKey, assignmentKey, title, contentMd, source } = {}) => {
+    const class_key = typeof classKey === 'string' ? classKey.trim() : '';
+    const titleSafe = typeof title === 'string' && title.trim() ? title.trim() : 'Untitled note';
+    const content_md = typeof contentMd === 'string' ? contentMd : '';
+    if (!class_key) throw new Error('class is required');
+    if (!content_md.trim()) throw new Error('note content is required');
+
+    const now = Date.now();
+    const noteId = (typeof id === 'string' && id.trim()) || `note_${now}_${Math.random().toString(36).slice(2, 8)}`;
+    const assignment_key = typeof assignmentKey === 'string' && assignmentKey.trim() ? assignmentKey.trim() : null;
+    const src = typeof source === 'string' && source.trim() ? source.trim() : 'pasted';
+
+    db.prepare(`
+      INSERT INTO class_notes (id, class_key, assignment_key, title, content_md, source, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        class_key=excluded.class_key,
+        assignment_key=excluded.assignment_key,
+        title=excluded.title,
+        content_md=excluded.content_md,
+        source=excluded.source,
+        updated_at=excluded.updated_at
+    `).run(noteId, class_key, assignment_key, titleSafe, content_md, src, now, now);
+
+    registry.audit('notes.upserted', { id: noteId, classKey: class_key, assignmentKey: assignment_key }, 'ui');
+    return { ok: true, id: noteId };
+  });
   ipcMain.handle('outbox:list', async (_evt, { limit = 50 } = {}) => {
     const rows = db
       .prepare('SELECT id, job, title, body_md, created_at, received_at, status FROM outbox_items ORDER BY created_at DESC LIMIT ?')

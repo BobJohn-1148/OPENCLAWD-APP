@@ -2,6 +2,8 @@ const { emitEvent } = require('../eventBus/bus');
 const { getLatestBrief } = require('../brief/store');
 const { ensureAgentRow, setAgentConfig, getAgentConfig } = require('./settings');
 const { syncOutboxOnce, getAppSetting, setAppSetting } = require('../sync/outbox');
+const { makeId } = require('../util/ids');
+const { nowTs } = require('../util/time');
 
 function registerIpc({ ipcMain, db, registry }) {
   // Ensure important agents exist in DB
@@ -14,6 +16,18 @@ function registerIpc({ ipcMain, db, registry }) {
       ...r,
       details: safeJson(r.details_json),
     }));
+  });
+
+
+  ipcMain.handle('db:clearAudit', async () => {
+    const deleted = db.prepare('DELETE FROM audit_log').run().changes;
+    registry.audit('audit.cleared', { deleted }, 'ui');
+    return { ok: true, deleted };
+  });
+
+  ipcMain.handle('db:getAuditStats', async () => {
+    const row = db.prepare('SELECT COUNT(*) as total, MAX(created_at) as latestTs FROM audit_log').get();
+    return { total: row?.total || 0, latestTs: row?.latestTs || null };
   });
 
   ipcMain.handle('brief:requestMorning', async () => {
@@ -42,7 +56,7 @@ function registerIpc({ ipcMain, db, registry }) {
   ipcMain.handle('telegram:sendTest', async () => {
     const brief = (getLatestBrief(db)?.brief) || {
       title: 'Morning Brief (test)',
-      blocks: [{ kind: 'info', text: 'This is a test message from Bob Assistant.' }],
+      blocks: [{ kind: 'info', text: 'This is a test message from JARVIS.' }],
     };
     emitEvent(db, { type: 'telegram.test_send', source_agent_key: 'ui', target_agent_key: 'telegram_sender', payload: { brief } });
     return { ok: true };
@@ -156,6 +170,18 @@ function safeJson(s) {
   } catch {
     return {};
   }
+}
+
+function normalizeStatus(status) {
+  const val = String(status || '').toLowerCase();
+  if (val === 'todo' || val === 'doing' || val === 'done') return val;
+  throw new Error('invalid status');
+}
+
+function normalizePriority(priority) {
+  const val = String(priority || '').toLowerCase();
+  if (val === 'low' || val === 'medium' || val === 'high') return val;
+  throw new Error('invalid priority');
 }
 
 module.exports = { registerIpc };

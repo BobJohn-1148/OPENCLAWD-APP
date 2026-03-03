@@ -10,13 +10,12 @@ const { WeatherAgent, WebSummaryAgent, CalendarAgent, EmailScanAgent } = require
 const { registerIpc } = require('../src/backend/ipc/handlers');
 const { TelegramSenderAgent } = require('../src/backend/agents/telegram_sender');
 const { DailyScheduler } = require('../src/backend/scheduler/daily');
-const { OutboxSyncWorker } = require('../src/backend/sync/worker');
+const { NoteSummarizerAgent, NoteFlashcardMakerAgent, NoteTaskExtractorAgent } = require('../src/backend/agents/note_tools');
 
 let db;
 let registry;
 let dispatcher;
 let dailyScheduler;
-let outboxSync;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -48,15 +47,15 @@ app.whenReady().then(() => {
   registry.register(CalendarAgent);
   registry.register(EmailScanAgent);
   registry.register(TelegramSenderAgent);
+  registry.register(NoteSummarizerAgent);
+  registry.register(NoteFlashcardMakerAgent);
+  registry.register(NoteTaskExtractorAgent);
 
   dispatcher = new Dispatcher({ db, registry, intervalMs: 300 });
   dispatcher.start();
 
   dailyScheduler = new DailyScheduler({ db, registry, timeZone: 'America/Chicago', hour: 7, minute: 30 });
   dailyScheduler.start();
-
-  outboxSync = new OutboxSyncWorker({ db, registry, intervalMs: 30_000 });
-  outboxSync.start();
 
   registerIpc({ ipcMain, db, registry });
 
@@ -68,7 +67,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (outboxSync) outboxSync.stop();
   if (dailyScheduler) dailyScheduler.stop();
   if (dispatcher) dispatcher.stop();
   if (process.platform !== 'darwin') app.quit();

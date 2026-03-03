@@ -9,20 +9,61 @@
     "electron:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "build": "vite build",
     "electron:build": "npm run build && electron-builder",
-    "test": "echo \"no tests yet\""
+    "test": "echo \"no tests yet\"",
+    "rebuild:electron": "electron-builder install-app-deps",
+    "pack:win": "npm run build && electron-builder --projectDir . --config.directories.app=. --win portable --x64",
+    "dist:win": "npm run build && electron-builder --projectDir . --config.directories.app=. --win nsis --x64",
+    "dist:win:dir": "npm run build && electron-builder --projectDir . --config.directories.app=. --win nsis --x64 --dir",
+    "dist:win:rebuild": "npm run dist:win",
+    "installer:windows": "npm run dist:win",
+    "installer:pe": "npm run build && electron-builder --projectDir . --config.directories.app=. --win nsis portable --x64"
   },
   "author": "Jack",
   "license": "UNLICENSED",
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.4",
     "better-sqlite3": "^12.6.2",
-    "electron": "^40.6.1",
-    "electron-builder": "^26.8.1",
     "lucide-react": "^0.576.0",
     "node-fetch": "^3.3.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "vite": "^7.3.1",
     "zod": "^4.3.6"
+  },
+  "build": {
+    "appId": "com.bobassistant.desktop",
+    "productName": "Bob Assistant",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Bob Assistant"
+    }
+  },
+  "devDependencies": {
+    "electron": "^40.6.1",
+    "electron-builder": "^26.8.1"
   }
 }

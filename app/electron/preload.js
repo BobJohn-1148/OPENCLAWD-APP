@@ -27,9 +27,4 @@ contextBridge.exposeInMainWorld('bob', {
   notesList: (opts) => ipcRenderer.invoke('notes:list', opts),
   notesClasses: () => ipcRenderer.invoke('notes:classes'),
   notesUpsert: (payload) => ipcRenderer.invoke('notes:upsert', payload),
-  // Task board
-  tasksList: () => ipcRenderer.invoke('tasks:list'),
-  tasksCreate: (payload) => ipcRenderer.invoke('tasks:create', payload),
-  tasksUpdate: (payload) => ipcRenderer.invoke('tasks:update', payload),
-  tasksDelete: (id) => ipcRenderer.invoke('tasks:delete', { id }),
 });

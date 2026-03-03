@@ -344,6 +344,192 @@ function TelegramSettings() {
   );
 }
 
+
+function AssignmentsNotesPage() {
+  const [classKey, setClassKey] = useState('');
+  const [assignmentKey, setAssignmentKey] = useState('');
+  const [title, setTitle] = useState('');
+  const [contentMd, setContentMd] = useState('');
+  const [items, setItems] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [status, setStatus] = useState('');
+
+  async function refreshGroups() {
+    const rows = await window.bob?.notesClasses?.();
+    const next = rows || [];
+    setGroups(next);
+    if (!classKey && next[0]?.class_key) {
+      setClassKey(next[0].class_key);
+      setAssignmentKey('');
+    }
+  }
+
+  async function refreshNotes({ nextClassKey, nextAssignmentKey } = {}) {
+    const c = typeof nextClassKey === 'string' ? nextClassKey : classKey;
+    const a = typeof nextAssignmentKey === 'string' ? nextAssignmentKey : assignmentKey;
+    const rows = await window.bob?.notesList?.({ classKey: c, assignmentKey: a || undefined, limit: 250 });
+    const next = rows || [];
+    setItems(next);
+    setSelectedId((prev) => (next.some((x) => x.id === prev) ? prev : (next[0]?.id || null)));
+  }
+
+  useEffect(() => {
+    (async () => {
+      await refreshGroups();
+      await refreshNotes();
+    })();
+  }, []);
+
+  useEffect(() => {
+    refreshNotes();
+  }, [classKey, assignmentKey]);
+
+  const selected = items.find((x) => x.id === selectedId) || null;
+
+  return (
+    <div className="notesPageLayout">
+      <div className="card glass notesNav">
+        <div className="cardHeader">
+          <div className="cardTitle">Classes</div>
+        </div>
+        <div className="cardBody notesNavBody">
+          {Array.from(new Set(groups.map((g) => g.class_key))).map((klass) => (
+            <div key={klass} className="notesClassBlock">
+              <button
+                className={`notesClassBtn ${classKey === klass && !assignmentKey ? 'active' : ''}`}
+                onClick={() => {
+                  setClassKey(klass);
+                  setAssignmentKey('');
+                }}
+              >
+                {klass}
+              </button>
+              <div className="notesClassAssignments">
+                {groups
+                  .filter((g) => g.class_key === klass && g.assignment_key)
+                  .map((g) => (
+                    <button
+                      key={`${g.class_key}_${g.assignment_key}`}
+                      className={`notesAssignmentBtn ${classKey === g.class_key && assignmentKey === g.assignment_key ? 'active' : ''}`}
+                      onClick={() => {
+                        setClassKey(g.class_key);
+                        setAssignmentKey(g.assignment_key);
+                      }}
+                    >
+                      {g.assignment_key} <span className="tiny">({g.note_count})</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          ))}
+          {groups.length === 0 ? <div className="tiny" style={{ color: 'var(--muted)' }}>No saved classes yet.</div> : null}
+        </div>
+      </div>
+
+      <div className="dashboardLeft">
+        <GlassCard title="Paste + Save Notes">
+          <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
+            Paste notes from Obsidian (or anywhere), save locally, and open them later from class/assignment.
+          </div>
+          <div className="notesFormGrid">
+            <label className="tiny">
+              Class
+              <input
+                className="notesInput"
+                value={classKey}
+                onChange={(e) => setClassKey(e.target.value)}
+                placeholder="e.g. CS-101"
+              />
+            </label>
+            <label className="tiny">
+              Assignment (optional)
+              <input
+                className="notesInput"
+                value={assignmentKey}
+                onChange={(e) => setAssignmentKey(e.target.value)}
+                placeholder="e.g. Homework 4"
+              />
+            </label>
+            <label className="tiny" style={{ gridColumn: '1 / -1' }}>
+              Note title
+              <input className="notesInput" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Chapter 3 key formulas" />
+            </label>
+          </div>
+          <textarea
+            className="notesTextarea"
+            value={contentMd}
+            onChange={(e) => setContentMd(e.target.value)}
+            placeholder="Paste your notes here (Markdown supported)..."
+          />
+          <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+            <button
+              className="btn"
+              onClick={async () => {
+                setStatus('Saving…');
+                try {
+                  const res = await window.bob?.notesUpsert?.({
+                    classKey,
+                    assignmentKey,
+                    title,
+                    contentMd,
+                    source: 'pasted',
+                  });
+                  setContentMd('');
+                  setTitle('');
+                  setStatus('Saved locally.');
+                  await refreshGroups();
+                  await refreshNotes({ nextClassKey: classKey, nextAssignmentKey: assignmentKey });
+                  if (res?.id) setSelectedId(res.id);
+                } catch (e) {
+                  setStatus(String(e?.message || e));
+                }
+              }}
+              disabled={!classKey.trim() || !contentMd.trim()}
+            >
+              Save note
+            </button>
+            <button className="btn" onClick={async () => { await refreshGroups(); await refreshNotes(); }}>Refresh notes</button>
+          </div>
+          {status ? <div className="tiny" style={{ marginTop: 10, color: 'var(--muted)' }}>{status}</div> : null}
+        </GlassCard>
+      </div>
+
+      <div className="card glass feedCard">
+        <div className="cardHeader">
+          <div className="cardTitle">
+            {classKey ? `Notes: ${classKey}` : 'Notes'}
+            {assignmentKey ? ` / ${assignmentKey}` : ''}
+          </div>
+        </div>
+        <div className="cardBody">
+          <div className="notesList">
+            {items.map((item) => (
+              <button key={item.id} className={`notesListItem ${selectedId === item.id ? 'active' : ''}`} onClick={() => setSelectedId(item.id)}>
+                <div style={{ fontWeight: 650 }}>{item.title}</div>
+                <div className="tiny" style={{ color: 'var(--muted)' }}>{item.assignment_key || 'General class note'}</div>
+                <div className="tiny" style={{ color: 'var(--muted)' }}>{formatAbsolute(item.updated_at)}</div>
+              </button>
+            ))}
+            {items.length === 0 ? <div className="tiny" style={{ color: 'var(--muted)' }}>No notes for this filter yet.</div> : null}
+          </div>
+          <div className="notesPreview">
+            {!selected ? (
+              <div className="tiny" style={{ color: 'var(--muted)' }}>Select a saved note to view it.</div>
+            ) : (
+              <>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>{selected.title}</div>
+                <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>{selected.assignment_key || 'General class note'}</div>
+                <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text)' }}>{selected.content_md}</div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -590,7 +776,7 @@ export default function App() {
       case 'inbox':
         return <GlassCard title="Inbox">Gmail viewer + summary panel coming next.</GlassCard>;
       case 'assignments':
-        return <GlassCard title="Assignments">Blackboard scrape + due-soon list coming next.</GlassCard>;
+        return <AssignmentsNotesPage />;
       case 'cron':
         return <CronJobsPage />;
       case 'assistant':

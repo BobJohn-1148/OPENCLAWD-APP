@@ -3,6 +3,10 @@ function nowChicago() {
   return new Date();
 }
 
+function nowTs() {
+  return Date.now();
+}
+
 function getTzParts(date, timeZone) {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -39,4 +43,4 @@ function shouldTriggerDaily({ now = new Date(), timeZone, hour, minute, lastSent
   return !sameDay;
 }
 
-module.exports = { getTzParts, shouldTriggerDaily, nowChicago };
+module.exports = { getTzParts, shouldTriggerDaily, nowChicago, nowTs };

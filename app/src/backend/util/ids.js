@@ -4,4 +4,8 @@ function id(prefix) {
   return `${prefix}_${randomUUID()}`;
 }
 
-module.exports = { id };
+function makeId(prefix) {
+  return id(prefix);
+}
+
+module.exports = { id, makeId };

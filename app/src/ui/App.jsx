@@ -6,6 +6,7 @@ import {
   GraduationCap,
   Clock,
   Bot,
+  ClipboardList,
   Settings as SettingsIcon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -18,6 +19,7 @@ const tabs = [
   { key: 'assignments', label: 'Assignments', icon: GraduationCap },
   { key: 'cron', label: 'Cron Jobs', icon: Clock },
   { key: 'assistant', label: 'Assistant', icon: Bot },
+  { key: 'tasks', label: 'Task Board', icon: ClipboardList },
   { key: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -180,6 +182,133 @@ function CronJobsPage() {
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TaskBoardPage() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({ title: '', description: '', priority: 'medium' });
+
+  async function refresh() {
+    setError('');
+    try {
+      const rows = await window.bob?.tasksList?.();
+      setItems(rows || []);
+    } catch (e) {
+      setError(String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const grouped = useMemo(() => ({
+    todo: items.filter((x) => x.status === 'todo'),
+    doing: items.filter((x) => x.status === 'doing'),
+    done: items.filter((x) => x.status === 'done'),
+  }), [items]);
+
+  const columns = [
+    { key: 'todo', label: 'To Do' },
+    { key: 'doing', label: 'In Progress' },
+    { key: 'done', label: 'Done' },
+  ];
+
+  async function createTask(e) {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    setError('');
+    try {
+      await window.bob?.tasksCreate?.({
+        title: form.title,
+        description: form.description,
+        priority: form.priority,
+        owner: 'openclawd-bot',
+      });
+      setForm({ title: '', description: '', priority: 'medium' });
+      await refresh();
+    } catch (e2) {
+      setError(String(e2?.message || e2));
+    }
+  }
+
+  async function moveTask(item, nextStatus) {
+    if (item.status === nextStatus) return;
+    await window.bob?.tasksUpdate?.({ id: item.id, status: nextStatus });
+    await refresh();
+  }
+
+  return (
+    <div className="tasksLayout">
+      <GlassCard title="Add task for OpenClawd bot">
+        <form className="taskForm" onSubmit={createTask}>
+          <input
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="What should OpenClawd do next?"
+            className="inputLike"
+          />
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            placeholder="Add details, acceptance criteria, or context"
+            className="inputLike taskTextarea"
+          />
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select
+              value={form.priority}
+              onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+              className="inputLike"
+              style={{ maxWidth: 180 }}
+            >
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <button className="btn" type="submit">Create task</button>
+            <button className="btn" type="button" onClick={refresh}>Refresh</button>
+          </div>
+          {error ? <div className="tiny" style={{ color: '#fda4af' }}>{error}</div> : null}
+        </form>
+      </GlassCard>
+
+      <div className="kanban">
+        {columns.map((col) => (
+          <div key={col.key} className="kanbanCol glass">
+            <div className="kanbanHeader">
+              <div className="cardTitle">{col.label}</div>
+              <div className="tiny" style={{ color: 'var(--muted)' }}>{grouped[col.key].length}</div>
+            </div>
+            <div className="kanbanItems">
+              {grouped[col.key].map((item) => (
+                <div key={item.id} className="kanbanCard">
+                  <div className="feedTitle">{item.title}</div>
+                  {item.description ? <div className="tiny" style={{ color: 'var(--muted)' }}>{item.description}</div> : null}
+                  <div className="taskMetaRow">
+                    <span className={`chip priority-${item.priority}`}>{item.priority}</span>
+                    <span className="tiny" style={{ color: 'var(--muted)' }}>{formatRelative(item.updated_at)}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {col.key !== 'todo' ? <button className="btn" onClick={() => moveTask(item, 'todo')}>To Do</button> : null}
+                    {col.key !== 'doing' ? <button className="btn" onClick={() => moveTask(item, 'doing')}>In Progress</button> : null}
+                    {col.key !== 'done' ? <button className="btn" onClick={() => moveTask(item, 'done')}>Done</button> : null}
+                    <button className="btn ghost" onClick={async () => { await window.bob?.tasksDelete?.(item.id); await refresh(); }}>Delete</button>
+                  </div>
+                </div>
+              ))}
+              {!grouped[col.key].length && !loading ? (
+                <div className="tiny" style={{ color: 'var(--muted)' }}>No tasks.</div>
+              ) : null}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -595,6 +724,8 @@ export default function App() {
         return <CronJobsPage />;
       case 'assistant':
         return <GlassCard title="Assistant">Chat UI (bubbles) connected to OpenClaw coming next.</GlassCard>;
+      case 'tasks':
+        return <TaskBoardPage />;
       case 'settings':
         return (
           <div className="grid">

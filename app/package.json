@@ -2,7 +2,7 @@
   "name": "bob-assistant",
   "version": "0.1.0",
   "private": true,
-  "description": "Bob Assistant - Windows desktop personal assistant",
+  "description": "JARVIS - Windows desktop personal assistant",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",

@@ -74,3 +74,23 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_conv_msgs_conv_created ON conversation_messages(conversation_id, created_at);
+
+-- VPS outbox sync items (downloaded + stored locally)
+CREATE TABLE IF NOT EXISTS outbox_items (
+  id TEXT PRIMARY KEY,
+  job TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body_md TEXT NOT NULL,
+  raw_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  received_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'new'
+);
+CREATE INDEX IF NOT EXISTS idx_outbox_created ON outbox_items(created_at);
+
+-- local settings that are not tied to a specific agent
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value_json TEXT NOT NULL DEFAULT '{}',
+  updated_at INTEGER NOT NULL
+);

@@ -87,6 +87,104 @@ function FeedItem({ item }) {
   );
 }
 
+function CronJobsPage() {
+  const [items, setItems] = useState([]);
+  const [selected, setSelected] = useState(null);
+
+  async function refresh() {
+    const rows = await window.bob?.outboxList?.({ limit: 50 });
+    setItems(rows || []);
+  }
+
+  useEffect(() => {
+    refresh();
+    const t = setInterval(refresh, 2000);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div className="dashboardLayout">
+      <div className="dashboardLeft">
+        <GlassCard title="Optimization Research">
+          <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
+            Synced from the VPS outbox when VPS Sync is enabled.
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+            <button className="btn" onClick={refresh}>Refresh</button>
+            <button
+              className="btn"
+              onClick={async () => {
+                // seed a local mock item so the UI is not empty
+                const mock = {
+                  id: `local_${Date.now()}`,
+                  job: 'app.optimize.research',
+                  title: 'Mock: Improve cron table density + empty states',
+                  body_md:
+                    'Suggestions:\n\n- Make the Cron Jobs table denser (smaller row height)\n- Add empty-state visuals\n- Use 2-column layout for details\n\nExample:\n\n- Before: large cards\n- After: compact list + right-side detail panel',
+                  created_at: Date.now(),
+                  received_at: Date.now(),
+                  status: 'new',
+                };
+                // Insert via audit log path (quick hack): we’ll store these through SQLite later if you want.
+                // For now, just show it in memory.
+                setItems((x) => [mock, ...x]);
+              }}
+            >
+              Add mock report
+            </button>
+          </div>
+          <div className="feed">
+            {items
+              .filter((i) => String(i.job || '').includes('optimize') || String(i.job || '').includes('research') || true)
+              .map((i) => (
+                <div
+                  key={i.id}
+                  className="feedItem"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setSelected(i)}
+                >
+                  <div className="feedRow">
+                    <div>
+                      <div className="feedTitle">{i.title}</div>
+                      <div className="feedMeta">
+                        <span className="chip done">{i.job}</span>
+                      </div>
+                    </div>
+                    <div className="feedWhen" title={formatAbsolute(i.created_at)}>
+                      {formatRelative(i.created_at)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            {items.length === 0 ? (
+              <div className="tiny" style={{ color: 'var(--muted)', padding: 10 }}>
+                No reports yet. Enable Settings → VPS Sync, then wait for the 4-hour cron to produce reports.
+              </div>
+            ) : null}
+          </div>
+        </GlassCard>
+      </div>
+
+      <div className="card glass feedCard">
+        <div className="cardHeader">
+          <div className="cardTitle">Report details</div>
+        </div>
+        <div className="cardBody" style={{ whiteSpace: 'pre-wrap' }}>
+          {!selected ? (
+            <div className="tiny" style={{ color: 'var(--muted)' }}>Select a report to view details.</div>
+          ) : (
+            <>
+              <div style={{ fontWeight: 650, color: 'var(--text)', marginBottom: 10 }}>{selected.title}</div>
+              <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>{selected.job}</div>
+              <div style={{ color: 'var(--text)' }}>{selected.body_md}</div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GlassCard({ title, children }) {
   return (
     <div className="card glass">
@@ -94,6 +192,81 @@ function GlassCard({ title, children }) {
         <div className="cardTitle">{title}</div>
       </div>
       <div className="cardBody">{children}</div>
+    </div>
+  );
+}
+
+function VpsSyncSettings() {
+  const [enabled, setEnabled] = useState(false);
+  const [baseUrl, setBaseUrl] = useState('');
+  const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      const cfg = await window.bob?.syncGetConfig?.();
+      if (cfg) {
+        setEnabled(Boolean(cfg.enabled));
+        setBaseUrl(cfg.baseUrl || '');
+      }
+    })();
+  }, []);
+
+  return (
+    <div>
+      <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
+        Optional. When enabled, the app will poll the VPS outbox every 30s and store results locally.
+        Planned base URL: https://&lt;ip&gt;:4443
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <label className="tiny" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Enable sync
+        </label>
+        <input
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder="https://187.124.76.51:4443"
+          style={{
+            flex: 1,
+            minWidth: 260,
+            padding: '10px 12px',
+            borderRadius: 14,
+            border: '1px solid rgba(255,255,255,0.14)',
+            background: 'rgba(255,255,255,0.06)',
+            color: 'var(--text)',
+            outline: 'none',
+          }}
+        />
+        <button
+          className="btn"
+          onClick={async () => {
+            setStatus('Saving…');
+            try {
+              await window.bob?.syncSetConfig?.({ enabled, baseUrl });
+              setStatus('Saved.');
+            } catch (e) {
+              setStatus(String(e?.message || e));
+            }
+          }}
+        >
+          Save
+        </button>
+        <button
+          className="btn"
+          onClick={async () => {
+            setStatus('Syncing…');
+            try {
+              const res = await window.bob?.syncRunOnce?.();
+              setStatus(res?.ok ? `Synced (added ${res.added || 0}).` : `Sync failed: ${res?.reason || 'unknown'}`);
+            } catch (e) {
+              setStatus(String(e?.message || e));
+            }
+          }}
+          disabled={!enabled || !baseUrl.trim()}
+        >
+          Sync now
+        </button>
+      </div>
+      {status ? <div className="tiny" style={{ marginTop: 10, color: 'var(--muted)' }}>{status}</div> : null}
     </div>
   );
 }
@@ -419,7 +592,7 @@ export default function App() {
       case 'assignments':
         return <GlassCard title="Assignments">Blackboard scrape + due-soon list coming next.</GlassCard>;
       case 'cron':
-        return <GlassCard title="Cron Jobs">Scheduled jobs + next run/last run pulled from OpenClaw coming next.</GlassCard>;
+        return <CronJobsPage />;
       case 'assistant':
         return <GlassCard title="Assistant">Chat UI (bubbles) connected to OpenClaw coming next.</GlassCard>;
       case 'settings':
@@ -435,6 +608,9 @@ export default function App() {
                   Light
                 </button>
               </div>
+            </GlassCard>
+            <GlassCard title="VPS Sync">
+              <VpsSyncSettings />
             </GlassCard>
             <GlassCard title="Integrations">
               <TelegramSettings />

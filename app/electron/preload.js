@@ -14,4 +14,10 @@ contextBridge.exposeInMainWorld('bob', {
   telegramGetConfig: () => ipcRenderer.invoke('telegram:getConfig'),
   telegramSetToken: (token) => ipcRenderer.invoke('telegram:setToken', { token }),
   telegramSendTest: () => ipcRenderer.invoke('telegram:sendTest'),
+
+  // VPS outbox sync
+  syncGetConfig: () => ipcRenderer.invoke('sync:getConfig'),
+  syncSetConfig: ({ enabled, baseUrl }) => ipcRenderer.invoke('sync:setConfig', { enabled, baseUrl }),
+  syncRunOnce: () => ipcRenderer.invoke('sync:runOnce'),
+  outboxList: (opts) => ipcRenderer.invoke('outbox:list', opts),
 });

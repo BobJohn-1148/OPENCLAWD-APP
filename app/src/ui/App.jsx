@@ -16,6 +16,7 @@ const tabs = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'calendar', label: 'Calendar', icon: CalendarDays },
   { key: 'inbox', label: 'Inbox', icon: Mail },
+  { key: 'classes', label: 'Classes', icon: BookOpen },
   { key: 'assignments', label: 'Assignments', icon: GraduationCap },
   { key: 'cron', label: 'Cron Jobs', icon: Clock },
   { key: 'assistant', label: 'Assistant', icon: Bot },
@@ -767,6 +768,7 @@ export default function App() {
   }, [feedQuery, feedStatus]);
 
   const [latestBrief, setLatestBrief] = useState(null);
+  const [upcomingReminders, setUpcomingReminders] = useState([]);
 
   async function refreshAudit() {
     const rows = await window.bob?.getAudit?.({ limit: 200 });
@@ -791,12 +793,19 @@ export default function App() {
     setLatestBrief(b);
   }
 
+  async function refreshReminders() {
+    const rows = await window.bob?.dashboardReminders?.();
+    setUpcomingReminders(rows || []);
+  }
+
   useEffect(() => {
     refreshAudit();
     refreshBrief();
+    refreshReminders();
     const t = setInterval(() => {
       refreshAudit();
       refreshBrief();
+      refreshReminders();
     }, 1500);
     return () => clearInterval(t);
   }, []);
@@ -850,6 +859,23 @@ export default function App() {
                     <div className="tiny" style={{ color: 'var(--muted)', whiteSpace: 'pre-wrap' }}>
                       {(latestBrief.blocks || []).map((b, i) => `• ${b.text}`).join('\n')}
                     </div>
+                  </div>
+                )}
+              </GlassCard>
+              <GlassCard title="Upcoming Reminders">
+                {upcomingReminders.length === 0 ? (
+                  <div className="tiny" style={{ color: 'var(--muted)' }}>No reminders in the next 7 days.</div>
+                ) : (
+                  <div className="notesList">
+                    {upcomingReminders.slice(0, 6).map((r) => (
+                      <div key={r.id} className="notesListItem">
+                        <div style={{ fontWeight: 650 }}>{r.title}</div>
+                        <div className="tiny" style={{ color: 'var(--muted)' }}>{formatAbsolute(r.start_at)}</div>
+                        <div className="tiny" style={{ color: 'var(--muted)' }}>
+                          {r.reminder_due ? 'Reminder due now' : `Reminder at ${formatAbsolute(r.reminder_at)}`}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </GlassCard>
@@ -907,9 +933,11 @@ export default function App() {
           </div>
         );
       case 'calendar':
-        return <GlassCard title="Calendar">Google Calendar integration coming next.</GlassCard>;
+        return <CalendarPage />;
       case 'inbox':
-        return <GlassCard title="Inbox">Gmail viewer + summary panel coming next.</GlassCard>;
+        return <InboxPage />;
+      case 'classes':
+        return <ClassesPage />;
       case 'assignments':
         return <AssignmentsNotesPage />;
       case 'cron':
@@ -956,6 +984,9 @@ export default function App() {
             </GlassCard>
             <GlassCard title="Integrations">
               <TelegramSettings />
+            </GlassCard>
+            <GlassCard title="ChatGPT">
+              <ChatGPTSettings />
             </GlassCard>
           </div>
         );

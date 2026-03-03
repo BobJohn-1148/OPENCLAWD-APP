@@ -108,3 +108,16 @@ CREATE TABLE IF NOT EXISTS class_notes (
 );
 CREATE INDEX IF NOT EXISTS idx_class_notes_class_updated ON class_notes(class_key, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_class_notes_assignment_updated ON class_notes(assignment_key, updated_at DESC);
+-- Task board items for planning and OpenClawd execution flow
+CREATE TABLE IF NOT EXISTS task_board_items (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'todo', -- todo | doing | done
+  priority TEXT NOT NULL DEFAULT 'medium', -- low | medium | high
+  owner TEXT NOT NULL DEFAULT 'openclawd-bot',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  completed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_task_board_status_priority_updated ON task_board_items(status, priority, updated_at DESC);

@@ -414,13 +414,3 @@ body{
   flex-direction:column;
   gap: 6px;
 }
-
-.notesStatsKv{
-  grid-template-columns: 130px 1fr;
-}
-
-.notesTopClasses{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-}

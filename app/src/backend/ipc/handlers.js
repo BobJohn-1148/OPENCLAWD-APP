@@ -5,6 +5,8 @@ const { emitEvent } = require('../eventBus/bus');
 const { getLatestBrief } = require('../brief/store');
 const { ensureAgentRow, setAgentConfig, getAgentConfig } = require('./settings');
 const { syncOutboxOnce, getAppSetting, setAppSetting } = require('../sync/outbox');
+const { makeId } = require('../util/ids');
+const { nowTs } = require('../util/time');
 
 function registerIpc({ ipcMain, db, registry }) {
   // Ensure important agents exist in DB
@@ -21,6 +23,18 @@ function registerIpc({ ipcMain, db, registry }) {
       ...r,
       details: safeJson(r.details_json),
     }));
+  });
+
+
+  ipcMain.handle('db:clearAudit', async () => {
+    const deleted = db.prepare('DELETE FROM audit_log').run().changes;
+    registry.audit('audit.cleared', { deleted }, 'ui');
+    return { ok: true, deleted };
+  });
+
+  ipcMain.handle('db:getAuditStats', async () => {
+    const row = db.prepare('SELECT COUNT(*) as total, MAX(created_at) as latestTs FROM audit_log').get();
+    return { total: row?.total || 0, latestTs: row?.latestTs || null };
   });
 
   ipcMain.handle('brief:requestMorning', async () => {
@@ -49,7 +63,7 @@ function registerIpc({ ipcMain, db, registry }) {
   ipcMain.handle('telegram:sendTest', async () => {
     const brief = (getLatestBrief(db)?.brief) || {
       title: 'Morning Brief (test)',
-      blocks: [{ kind: 'info', text: 'This is a test message from Bob Assistant.' }],
+      blocks: [{ kind: 'info', text: 'This is a test message from JARVIS.' }],
     };
     emitEvent(db, { type: 'telegram.test_send', source_agent_key: 'ui', target_agent_key: 'telegram_sender', payload: { brief } });
     return { ok: true };
@@ -77,6 +91,7 @@ function registerIpc({ ipcMain, db, registry }) {
     registry.audit('sync.outbox.run', res, 'sync');
     return res;
   });
+
 
   // Local class notes
   ipcMain.handle('notes:list', async (_evt, { classKey, assignmentKey, limit = 200 } = {}) => {
@@ -147,111 +162,6 @@ function registerIpc({ ipcMain, db, registry }) {
     registry.audit('notes.upserted', { id: noteId, classKey: class_key, assignmentKey: assignment_key }, 'ui');
     return { ok: true, id: noteId };
   });
-
-  ipcMain.handle('notes:dashboard', async () => {
-    const totals = db.prepare('SELECT COUNT(*) AS count, MAX(updated_at) AS last_updated FROM class_notes').get();
-    const classCount = db.prepare('SELECT COUNT(DISTINCT class_key) AS count FROM class_notes').get();
-    const assignmentCount = db.prepare('SELECT COUNT(DISTINCT assignment_key) AS count FROM class_notes WHERE assignment_key IS NOT NULL').get();
-    const topClasses = db
-      .prepare('SELECT class_key, COUNT(*) AS note_count, MAX(updated_at) AS updated_at FROM class_notes GROUP BY class_key ORDER BY note_count DESC, updated_at DESC LIMIT 8')
-      .all();
-    return {
-      totalNotes: totals?.count || 0,
-      classCount: classCount?.count || 0,
-      assignmentCount: assignmentCount?.count || 0,
-      lastUpdated: totals?.last_updated || null,
-      topClasses,
-    };
-  });
-
-  ipcMain.handle('notes:obsidianGetConfig', async () => {
-    return getAppSetting(db, 'obsidian_notes') || { vaultPath: '', enabled: false };
-  });
-
-  ipcMain.handle('notes:obsidianSetConfig', async (_evt, { vaultPath, enabled } = {}) => {
-    const next = {
-      vaultPath: typeof vaultPath === 'string' ? vaultPath.trim() : '',
-      enabled: Boolean(enabled),
-    };
-    setAppSetting(db, 'obsidian_notes', next);
-    registry.audit('notes.obsidian.config.updated', { enabled: next.enabled, hasPath: Boolean(next.vaultPath) }, 'ui');
-    return { ok: true };
-  });
-
-  ipcMain.handle('notes:obsidianImport', async (_evt, { vaultPath } = {}) => {
-    const root = typeof vaultPath === 'string' && vaultPath.trim() ? vaultPath.trim() : '';
-    if (!root) throw new Error('vault path is required');
-    if (!fs.existsSync(root)) throw new Error('vault path does not exist');
-
-    const files = walkMarkdown(root).slice(0, 3000);
-    const now = Date.now();
-    let imported = 0;
-    for (const filePath of files) {
-      const rel = path.relative(root, filePath);
-      const parts = rel.split(path.sep).filter(Boolean);
-      const classKey = parts[0] || 'Obsidian';
-      const assignmentKey = parts.length > 2 ? parts[1] : null;
-      const content = fs.readFileSync(filePath, 'utf8');
-      if (!content.trim()) continue;
-      const title = extractTitle(content) || path.basename(filePath, '.md');
-      const stableId = `obs_${crypto.createHash('sha1').update(filePath).digest('hex').slice(0, 18)}`;
-
-      db.prepare(`
-        INSERT INTO class_notes (id, class_key, assignment_key, title, content_md, source, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          class_key=excluded.class_key,
-          assignment_key=excluded.assignment_key,
-          title=excluded.title,
-          content_md=excluded.content_md,
-          source=excluded.source,
-          updated_at=excluded.updated_at
-      `).run(stableId, classKey, assignmentKey, title, content, 'obsidian', now, now);
-      imported += 1;
-    }
-
-    registry.audit('notes.obsidian.imported', { imported, root }, 'ui');
-    return { ok: true, imported, scanned: files.length };
-  });
-
-  ipcMain.handle('notes:aiAction', async (_evt, { action, noteId } = {}) => {
-    const row = db
-      .prepare('SELECT id, class_key, assignment_key, title, content_md FROM class_notes WHERE id = ?')
-      .get(noteId);
-    if (!row) throw new Error('note not found');
-
-    const map = {
-      summary: 'note_summarizer',
-      flashcards: 'note_flashcard_maker',
-      tasks: 'note_task_extractor',
-    };
-    const target = map[action];
-    if (!target) throw new Error('invalid ai action');
-
-    const correlationId = `notes_ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    emitEvent(db, {
-      type: `notes.ai.${action}.requested`,
-      source_agent_key: 'ui',
-      target_agent_key: target,
-      correlation_id: correlationId,
-      payload: { note: row },
-    });
-
-    const started = Date.now();
-    while (Date.now() - started < 4000) {
-      const ev = db
-        .prepare('SELECT payload_json FROM events WHERE type = ? AND correlation_id = ? ORDER BY created_at DESC LIMIT 1')
-        .get('notes.ai.result', correlationId);
-      if (ev?.payload_json) {
-        const payload = safeJson(ev.payload_json);
-        return { ok: true, payload };
-      }
-      await delay(120);
-    }
-
-    return { ok: false, reason: 'timeout' };
-  });
-
   ipcMain.handle('outbox:list', async (_evt, { limit = 50 } = {}) => {
     const rows = db
       .prepare('SELECT id, job, title, body_md, created_at, received_at, status FROM outbox_items ORDER BY created_at DESC LIMIT ?')
@@ -292,6 +202,18 @@ function safeJson(s) {
   } catch {
     return {};
   }
+}
+
+function normalizeStatus(status) {
+  const val = String(status || '').toLowerCase();
+  if (val === 'todo' || val === 'doing' || val === 'done') return val;
+  throw new Error('invalid status');
+}
+
+function normalizePriority(priority) {
+  const val = String(priority || '').toLowerCase();
+  if (val === 'low' || val === 'medium' || val === 'high') return val;
+  throw new Error('invalid priority');
 }
 
 module.exports = { registerIpc };

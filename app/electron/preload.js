@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('bob', {
 
   // Data
   getAudit: (opts) => ipcRenderer.invoke('db:getAudit', opts),
+  clearAudit: () => ipcRenderer.invoke('db:clearAudit'),
+  getAuditStats: () => ipcRenderer.invoke('db:getAuditStats'),
 
   // Brief
   requestMorningBrief: () => ipcRenderer.invoke('brief:requestMorning'),
@@ -24,10 +26,5 @@ contextBridge.exposeInMainWorld('bob', {
   // Notes
   notesList: (opts) => ipcRenderer.invoke('notes:list', opts),
   notesClasses: () => ipcRenderer.invoke('notes:classes'),
-  notesDashboard: () => ipcRenderer.invoke('notes:dashboard'),
   notesUpsert: (payload) => ipcRenderer.invoke('notes:upsert', payload),
-  notesObsidianGetConfig: () => ipcRenderer.invoke('notes:obsidianGetConfig'),
-  notesObsidianSetConfig: (payload) => ipcRenderer.invoke('notes:obsidianSetConfig', payload),
-  notesObsidianImport: (payload) => ipcRenderer.invoke('notes:obsidianImport', payload),
-  notesAiAction: (payload) => ipcRenderer.invoke('notes:aiAction', payload),
 });

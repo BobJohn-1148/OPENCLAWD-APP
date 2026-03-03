@@ -6,6 +6,7 @@ import {
   GraduationCap,
   Clock,
   Bot,
+  ClipboardList,
   Settings as SettingsIcon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -18,6 +19,7 @@ const tabs = [
   { key: 'assignments', label: 'Assignments', icon: GraduationCap },
   { key: 'cron', label: 'Cron Jobs', icon: Clock },
   { key: 'assistant', label: 'Assistant', icon: Bot },
+  { key: 'tasks', label: 'Task Board', icon: ClipboardList },
   { key: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -180,6 +182,133 @@ function CronJobsPage() {
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TaskBoardPage() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({ title: '', description: '', priority: 'medium' });
+
+  async function refresh() {
+    setError('');
+    try {
+      const rows = await window.bob?.tasksList?.();
+      setItems(rows || []);
+    } catch (e) {
+      setError(String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const grouped = useMemo(() => ({
+    todo: items.filter((x) => x.status === 'todo'),
+    doing: items.filter((x) => x.status === 'doing'),
+    done: items.filter((x) => x.status === 'done'),
+  }), [items]);
+
+  const columns = [
+    { key: 'todo', label: 'To Do' },
+    { key: 'doing', label: 'In Progress' },
+    { key: 'done', label: 'Done' },
+  ];
+
+  async function createTask(e) {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    setError('');
+    try {
+      await window.bob?.tasksCreate?.({
+        title: form.title,
+        description: form.description,
+        priority: form.priority,
+        owner: 'openclawd-bot',
+      });
+      setForm({ title: '', description: '', priority: 'medium' });
+      await refresh();
+    } catch (e2) {
+      setError(String(e2?.message || e2));
+    }
+  }
+
+  async function moveTask(item, nextStatus) {
+    if (item.status === nextStatus) return;
+    await window.bob?.tasksUpdate?.({ id: item.id, status: nextStatus });
+    await refresh();
+  }
+
+  return (
+    <div className="tasksLayout">
+      <GlassCard title="Add task for OpenClawd bot">
+        <form className="taskForm" onSubmit={createTask}>
+          <input
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="What should OpenClawd do next?"
+            className="inputLike"
+          />
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            placeholder="Add details, acceptance criteria, or context"
+            className="inputLike taskTextarea"
+          />
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select
+              value={form.priority}
+              onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+              className="inputLike"
+              style={{ maxWidth: 180 }}
+            >
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <button className="btn" type="submit">Create task</button>
+            <button className="btn" type="button" onClick={refresh}>Refresh</button>
+          </div>
+          {error ? <div className="tiny" style={{ color: '#fda4af' }}>{error}</div> : null}
+        </form>
+      </GlassCard>
+
+      <div className="kanban">
+        {columns.map((col) => (
+          <div key={col.key} className="kanbanCol glass">
+            <div className="kanbanHeader">
+              <div className="cardTitle">{col.label}</div>
+              <div className="tiny" style={{ color: 'var(--muted)' }}>{grouped[col.key].length}</div>
+            </div>
+            <div className="kanbanItems">
+              {grouped[col.key].map((item) => (
+                <div key={item.id} className="kanbanCard">
+                  <div className="feedTitle">{item.title}</div>
+                  {item.description ? <div className="tiny" style={{ color: 'var(--muted)' }}>{item.description}</div> : null}
+                  <div className="taskMetaRow">
+                    <span className={`chip priority-${item.priority}`}>{item.priority}</span>
+                    <span className="tiny" style={{ color: 'var(--muted)' }}>{formatRelative(item.updated_at)}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {col.key !== 'todo' ? <button className="btn" onClick={() => moveTask(item, 'todo')}>To Do</button> : null}
+                    {col.key !== 'doing' ? <button className="btn" onClick={() => moveTask(item, 'doing')}>In Progress</button> : null}
+                    {col.key !== 'done' ? <button className="btn" onClick={() => moveTask(item, 'done')}>Done</button> : null}
+                    <button className="btn ghost" onClick={async () => { await window.bob?.tasksDelete?.(item.id); await refresh(); }}>Delete</button>
+                  </div>
+                </div>
+              ))}
+              {!grouped[col.key].length && !loading ? (
+                <div className="tiny" style={{ color: 'var(--muted)' }}>No tasks.</div>
+              ) : null}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -353,9 +482,6 @@ function AssignmentsNotesPage() {
   const [items, setItems] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [groups, setGroups] = useState([]);
-  const [dashboard, setDashboard] = useState({ totalNotes: 0, classCount: 0, assignmentCount: 0, topClasses: [] });
-  const [vaultPath, setVaultPath] = useState('');
-  const [vaultEnabled, setVaultEnabled] = useState(false);
   const [status, setStatus] = useState('');
 
   async function refreshGroups() {
@@ -366,11 +492,6 @@ function AssignmentsNotesPage() {
       setClassKey(next[0].class_key);
       setAssignmentKey('');
     }
-  }
-
-  async function refreshDashboard() {
-    const d = await window.bob?.notesDashboard?.();
-    if (d) setDashboard(d);
   }
 
   async function refreshNotes({ nextClassKey, nextAssignmentKey } = {}) {
@@ -384,13 +505,7 @@ function AssignmentsNotesPage() {
 
   useEffect(() => {
     (async () => {
-      const cfg = await window.bob?.notesObsidianGetConfig?.();
-      if (cfg) {
-        setVaultPath(cfg.vaultPath || '');
-        setVaultEnabled(Boolean(cfg.enabled));
-      }
       await refreshGroups();
-      await refreshDashboard();
       await refreshNotes();
     })();
   }, []);
@@ -442,72 +557,6 @@ function AssignmentsNotesPage() {
       </div>
 
       <div className="dashboardLeft">
-        <GlassCard title="Class Dashboard">
-          <div className="kv notesStatsKv">
-            <div className="k">Total Notes</div><div className="v">{dashboard.totalNotes}</div>
-            <div className="k">Classes</div><div className="v">{dashboard.classCount}</div>
-            <div className="k">Assignments</div><div className="v">{dashboard.assignmentCount}</div>
-            <div className="k">Last Update</div><div className="v">{dashboard.lastUpdated ? formatAbsolute(dashboard.lastUpdated) : '—'}</div>
-          </div>
-          <div className="tiny" style={{ color: 'var(--muted)', marginTop: 10, marginBottom: 6 }}>Top classes by note count</div>
-          <div className="notesTopClasses">
-            {(dashboard.topClasses || []).map((x) => (
-              <button key={x.class_key} className="notesClassBtn" onClick={() => { setClassKey(x.class_key); setAssignmentKey(''); }}>
-                {x.class_key} <span className="tiny">({x.note_count})</span>
-              </button>
-            ))}
-          </div>
-        </GlassCard>
-
-        <GlassCard title="Obsidian Vault Import">
-          <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
-            Import Markdown notes from a local Obsidian vault. First folder level becomes Class, second level can map to Assignment.
-          </div>
-          <label className="tiny" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <input type="checkbox" checked={vaultEnabled} onChange={(e) => setVaultEnabled(e.target.checked)} /> Enable Obsidian vault sync settings
-          </label>
-          <input
-            className="notesInput"
-            value={vaultPath}
-            onChange={(e) => setVaultPath(e.target.value)}
-            placeholder="C:\Users\You\Documents\ObsidianVault"
-          />
-          <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-            <button
-              className="btn"
-              onClick={async () => {
-                setStatus('Saving Obsidian config…');
-                try {
-                  await window.bob?.notesObsidianSetConfig?.({ vaultPath, enabled: vaultEnabled });
-                  setStatus('Obsidian config saved.');
-                } catch (e) {
-                  setStatus(String(e?.message || e));
-                }
-              }}
-            >
-              Save config
-            </button>
-            <button
-              className="btn"
-              onClick={async () => {
-                setStatus('Importing from vault…');
-                try {
-                  const res = await window.bob?.notesObsidianImport?.({ vaultPath });
-                  setStatus(`Imported ${res?.imported || 0} notes (${res?.scanned || 0} files scanned).`);
-                  await refreshGroups();
-                  await refreshDashboard();
-                  await refreshNotes();
-                } catch (e) {
-                  setStatus(String(e?.message || e));
-                }
-              }}
-              disabled={!vaultPath.trim()}
-            >
-              Import now
-            </button>
-          </div>
-        </GlassCard>
-
         <GlassCard title="Paste + Save Notes">
           <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
             Paste notes from Obsidian (or anywhere), save locally, and open them later from class/assignment.
@@ -559,7 +608,6 @@ function AssignmentsNotesPage() {
                   setTitle('');
                   setStatus('Saved locally.');
                   await refreshGroups();
-                  await refreshDashboard();
                   await refreshNotes({ nextClassKey: classKey, nextAssignmentKey: assignmentKey });
                   if (res?.id) setSelectedId(res.id);
                 } catch (e) {
@@ -570,7 +618,7 @@ function AssignmentsNotesPage() {
             >
               Save note
             </button>
-            <button className="btn" onClick={async () => { await refreshGroups(); await refreshDashboard(); await refreshNotes(); }}>Refresh notes</button>
+            <button className="btn" onClick={async () => { await refreshGroups(); await refreshNotes(); }}>Refresh notes</button>
           </div>
           {status ? <div className="tiny" style={{ marginTop: 10, color: 'var(--muted)' }}>{status}</div> : null}
         </GlassCard>
@@ -605,89 +653,6 @@ function AssignmentsNotesPage() {
               </>
             )}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NotesAssistantPage() {
-  const [items, setItems] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [result, setResult] = useState('');
-  const [status, setStatus] = useState('');
-
-  async function refreshNotes() {
-    const rows = await window.bob?.notesList?.({ limit: 200 });
-    const next = rows || [];
-    setItems(next);
-    if (!selectedId && next[0]) setSelectedId(next[0].id);
-  }
-
-  useEffect(() => {
-    refreshNotes();
-  }, []);
-
-  const selected = items.find((x) => x.id === selectedId) || null;
-
-  return (
-    <div className="dashboardLayout">
-      <div className="card glass feedCard">
-        <div className="cardHeader">
-          <div className="cardTitle">Notes AI Assistant</div>
-        </div>
-        <div className="cardBody">
-          <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
-            Subagents can summarize notes, generate flashcards, and extract tasks from your class notes.
-          </div>
-          <div className="notesList">
-            {items.map((item) => (
-              <button key={item.id} className={`notesListItem ${selectedId === item.id ? 'active' : ''}`} onClick={() => setSelectedId(item.id)}>
-                <div style={{ fontWeight: 650 }}>{item.title}</div>
-                <div className="tiny" style={{ color: 'var(--muted)' }}>{item.class_key}{item.assignment_key ? ` / ${item.assignment_key}` : ''}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="card glass feedCard">
-        <div className="cardHeader">
-          <div className="cardTitle">AI Actions</div>
-        </div>
-        <div className="cardBody">
-          {!selected ? (
-            <div className="tiny" style={{ color: 'var(--muted)' }}>Select a note first.</div>
-          ) : (
-            <>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>{selected.title}</div>
-              <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>{selected.class_key}{selected.assignment_key ? ` / ${selected.assignment_key}` : ''}</div>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-                <button className="btn" onClick={async () => {
-                  setStatus('Generating summary…');
-                  const res = await window.bob?.notesAiAction?.({ action: 'summary', noteId: selected.id });
-                  setResult(res?.payload?.result || 'No result.');
-                  setStatus('Done.');
-                }}>Summarize</button>
-                <button className="btn" onClick={async () => {
-                  setStatus('Generating flashcards…');
-                  const res = await window.bob?.notesAiAction?.({ action: 'flashcards', noteId: selected.id });
-                  setResult(res?.payload?.result || 'No result.');
-                  setStatus('Done.');
-                }}>Make flashcards</button>
-                <button className="btn" onClick={async () => {
-                  setStatus('Extracting tasks…');
-                  const res = await window.bob?.notesAiAction?.({ action: 'tasks', noteId: selected.id });
-                  setResult(res?.payload?.result || 'No result.');
-                  setStatus('Done.');
-                }}>Extract tasks</button>
-              </div>
-              {status ? <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>{status}</div> : null}
-              <div className="notesPreview" style={{ minHeight: 250 }}>
-                <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text)' }}>{result || 'Run an action to see output.'}</div>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>
@@ -750,6 +715,7 @@ export default function App() {
   }, [auditOpen]);
 
   const [auditLog, setAuditLog] = useState([]);
+  const [auditStats, setAuditStats] = useState({ total: 0, latestTs: null });
 
   const [feed, setFeed] = useState([]);
 
@@ -804,15 +770,20 @@ export default function App() {
 
   async function refreshAudit() {
     const rows = await window.bob?.getAudit?.({ limit: 200 });
-    if (!rows) return;
-    setAuditLog(
-      rows.map((r) => ({
-        id: r.id,
-        name: r.action,
-        ts: r.created_at,
-        details: r.details_json ? JSON.stringify(r.details, null, 2) : '',
-      }))
-    );
+    const stats = await window.bob?.getAuditStats?.();
+    if (rows) {
+      setAuditLog(
+        rows.map((r) => ({
+          id: r.id,
+          name: r.action,
+          ts: r.created_at,
+          details: r.details_json ? JSON.stringify(r.details_json) : '',
+        }))
+      );
+    }
+    if (stats) {
+      setAuditStats({ total: stats.total || 0, latestTs: stats.latestTs || null });
+    }
   }
 
   async function refreshBrief() {
@@ -838,7 +809,7 @@ export default function App() {
             <div className="dashboardLeft">
               <GlassCard title="Status">
                 <div className="kv">
-                  <div className="k">Agent</div><div className="v">Bob (local)</div>
+                  <div className="k">Agent</div><div className="v">JARVIS (local)</div>
                   <div className="k">Mode</div><div className="v">Local-only • SQLite</div>
                   <div className="k">Gmail</div>
                   <div className="v">
@@ -944,19 +915,40 @@ export default function App() {
       case 'cron':
         return <CronJobsPage />;
       case 'assistant':
-        return <NotesAssistantPage />;
+        return <GlassCard title="Assistant">Chat UI (bubbles) connected to OpenClaw coming next.</GlassCard>;
+      case 'tasks':
+        return <TaskBoardPage />;
       case 'settings':
         return (
           <div className="grid">
-            <GlassCard title="Appearance">
+            <GlassCard title="Theme">
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <div style={{ flex: 1 }}>Theme</div>
+                <div style={{ flex: 1 }}>Choose app theme</div>
                 <button className="btn" onClick={() => setTheme('dark')} disabled={theme === 'dark'}>
                   Dark
                 </button>
                 <button className="btn" onClick={() => setTheme('light')} disabled={theme === 'light'}>
                   Light
                 </button>
+              </div>
+            </GlassCard>
+            <GlassCard title="Audit Log">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="tiny" style={{ color: 'var(--muted)' }}>
+                  Entries: {auditStats.total} {auditStats.latestTs ? `• latest ${formatRelative(auditStats.latestTs)}` : ''}
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button className="btn" onClick={() => setAuditOpen(true)}>Open Audit Log</button>
+                  <button
+                    className="btn ghost"
+                    onClick={async () => {
+                      await window.bob?.clearAudit?.();
+                      await refreshAudit();
+                    }}
+                  >
+                    Clear Audit Log
+                  </button>
+                </div>
               </div>
             </GlassCard>
             <GlassCard title="VPS Sync">
@@ -970,7 +962,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [tab]);
+  }, [tab, filteredFeed, feedQuery, feedStatus, latestBrief, theme, auditStats]);
 
   return (
     <div className="appRoot">
@@ -1003,7 +995,7 @@ export default function App() {
       ) : null}
       <aside className={`sidebar glass ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="brand">
-          <div className="brandTitle">Bob Assistant</div>
+          <div className="brandTitle">JARVIS</div>
           <button
             className="btn ghost"
             onClick={() => setSidebarCollapsed((v) => !v)}
@@ -1026,7 +1018,7 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebarFooter">
-          <div className="tiny">Audit log: pending</div>
+          <div className="tiny">Audit log: {auditStats.total} entries</div>
         </div>
       </aside>
       <main className="main">

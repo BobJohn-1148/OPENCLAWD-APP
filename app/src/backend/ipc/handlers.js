@@ -18,6 +18,18 @@ function registerIpc({ ipcMain, db, registry }) {
     }));
   });
 
+
+  ipcMain.handle('db:clearAudit', async () => {
+    const deleted = db.prepare('DELETE FROM audit_log').run().changes;
+    registry.audit('audit.cleared', { deleted }, 'ui');
+    return { ok: true, deleted };
+  });
+
+  ipcMain.handle('db:getAuditStats', async () => {
+    const row = db.prepare('SELECT COUNT(*) as total, MAX(created_at) as latestTs FROM audit_log').get();
+    return { total: row?.total || 0, latestTs: row?.latestTs || null };
+  });
+
   ipcMain.handle('brief:requestMorning', async () => {
     const evt = emitEvent(db, { type: 'brief.requested', source_agent_key: 'ui', payload: {} });
     registry.audit('ui.brief.requested', { eventId: evt.id }, 'ui');
@@ -44,7 +56,7 @@ function registerIpc({ ipcMain, db, registry }) {
   ipcMain.handle('telegram:sendTest', async () => {
     const brief = (getLatestBrief(db)?.brief) || {
       title: 'Morning Brief (test)',
-      blocks: [{ kind: 'info', text: 'This is a test message from Bob Assistant.' }],
+      blocks: [{ kind: 'info', text: 'This is a test message from JARVIS.' }],
     };
     emitEvent(db, { type: 'telegram.test_send', source_agent_key: 'ui', target_agent_key: 'telegram_sender', payload: { brief } });
     return { ok: true };

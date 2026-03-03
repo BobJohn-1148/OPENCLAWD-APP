@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('bob', {
 
   // Data
   getAudit: (opts) => ipcRenderer.invoke('db:getAudit', opts),
+  clearAudit: () => ipcRenderer.invoke('db:clearAudit'),
+  getAuditStats: () => ipcRenderer.invoke('db:getAuditStats'),
 
   // Brief
   requestMorningBrief: () => ipcRenderer.invoke('brief:requestMorning'),

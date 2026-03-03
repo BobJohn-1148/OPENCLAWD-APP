@@ -529,6 +529,7 @@ export default function App() {
   }, [auditOpen]);
 
   const [auditLog, setAuditLog] = useState([]);
+  const [auditStats, setAuditStats] = useState({ total: 0, latestTs: null });
 
   const [feed, setFeed] = useState([]);
 
@@ -583,15 +584,20 @@ export default function App() {
 
   async function refreshAudit() {
     const rows = await window.bob?.getAudit?.({ limit: 200 });
-    if (!rows) return;
-    setAuditLog(
-      rows.map((r) => ({
-        id: r.id,
-        name: r.action,
-        ts: r.created_at,
-        details: r.details_json ? JSON.stringify(r.details, null, 2) : '',
-      }))
-    );
+    const stats = await window.bob?.getAuditStats?.();
+    if (rows) {
+      setAuditLog(
+        rows.map((r) => ({
+          id: r.id,
+          name: r.action,
+          ts: r.created_at,
+          details: r.details_json ? JSON.stringify(r.details_json) : '',
+        }))
+      );
+    }
+    if (stats) {
+      setAuditStats({ total: stats.total || 0, latestTs: stats.latestTs || null });
+    }
   }
 
   async function refreshBrief() {
@@ -617,7 +623,7 @@ export default function App() {
             <div className="dashboardLeft">
               <GlassCard title="Status">
                 <div className="kv">
-                  <div className="k">Agent</div><div className="v">Bob (local)</div>
+                  <div className="k">Agent</div><div className="v">JARVIS (local)</div>
                   <div className="k">Mode</div><div className="v">Local-only • SQLite</div>
                   <div className="k">Gmail</div>
                   <div className="v">
@@ -729,15 +735,34 @@ export default function App() {
       case 'settings':
         return (
           <div className="grid">
-            <GlassCard title="Appearance">
+            <GlassCard title="Theme">
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <div style={{ flex: 1 }}>Theme</div>
+                <div style={{ flex: 1 }}>Choose app theme</div>
                 <button className="btn" onClick={() => setTheme('dark')} disabled={theme === 'dark'}>
                   Dark
                 </button>
                 <button className="btn" onClick={() => setTheme('light')} disabled={theme === 'light'}>
                   Light
                 </button>
+              </div>
+            </GlassCard>
+            <GlassCard title="Audit Log">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="tiny" style={{ color: 'var(--muted)' }}>
+                  Entries: {auditStats.total} {auditStats.latestTs ? `• latest ${formatRelative(auditStats.latestTs)}` : ''}
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button className="btn" onClick={() => setAuditOpen(true)}>Open Audit Log</button>
+                  <button
+                    className="btn ghost"
+                    onClick={async () => {
+                      await window.bob?.clearAudit?.();
+                      await refreshAudit();
+                    }}
+                  >
+                    Clear Audit Log
+                  </button>
+                </div>
               </div>
             </GlassCard>
             <GlassCard title="VPS Sync">
@@ -751,7 +776,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [tab]);
+  }, [tab, filteredFeed, feedQuery, feedStatus, latestBrief, theme, auditStats]);
 
   return (
     <div className="appRoot">
@@ -784,7 +809,7 @@ export default function App() {
       ) : null}
       <aside className={`sidebar glass ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="brand">
-          <div className="brandTitle">Bob Assistant</div>
+          <div className="brandTitle">JARVIS</div>
           <button
             className="btn ghost"
             onClick={() => setSidebarCollapsed((v) => !v)}
@@ -807,7 +832,7 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebarFooter">
-          <div className="tiny">Audit log: pending</div>
+          <div className="tiny">Audit log: {auditStats.total} entries</div>
         </div>
       </aside>
       <main className="main">

@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const { emitEvent } = require('../eventBus/bus');
 const { getLatestBrief } = require('../brief/store');
 const { ensureAgentRow, setAgentConfig, getAgentConfig } = require('./settings');
@@ -8,6 +11,10 @@ const { nowTs } = require('../util/time');
 function registerIpc({ ipcMain, db, registry }) {
   // Ensure important agents exist in DB
   ensureAgentRow(db, { key: 'telegram_sender', name: 'Telegram Sender' });
+  ensureAgentRow(db, { key: 'note_summarizer', name: 'Note Summarizer' });
+  ensureAgentRow(db, { key: 'note_flashcard_maker', name: 'Note Flashcard Maker' });
+  ensureAgentRow(db, { key: 'note_task_extractor', name: 'Note Task Extractor' });
+
   ipcMain.handle('db:getAudit', async (_evt, { limit = 200 } = {}) => {
     const rows = db
       .prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?')
@@ -163,6 +170,31 @@ function registerIpc({ ipcMain, db, registry }) {
   });
 }
 
+function walkMarkdown(root) {
+  const out = [];
+  const stack = [root];
+  while (stack.length) {
+    const cur = stack.pop();
+    const entries = fs.readdirSync(cur, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      const p = path.join(cur, e.name);
+      if (e.isDirectory()) stack.push(p);
+      else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) out.push(p);
+    }
+  }
+  return out;
+}
+
+function extractTitle(md) {
+  const m = md.match(/^#\s+(.+)$/m);
+  if (m) return String(m[1] || '').trim();
+  return '';
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function safeJson(s) {
   try {

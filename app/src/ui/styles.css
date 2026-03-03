@@ -414,24 +414,3 @@ body{
   flex-direction:column;
   gap: 6px;
 }
-
-.notesStatsKv{
-  grid-template-columns: 130px 1fr;
-}
-
-.notesTopClasses{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-}
-
-.calendarModal{
-  position: fixed;
-  z-index: 60;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(760px, calc(100vw - 36px));
-  max-height: calc(100vh - 60px);
-  overflow: auto;
-}

@@ -23,7 +23,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: 'Bob Assistant',
+    title: 'JARVIS',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

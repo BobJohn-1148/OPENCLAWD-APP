@@ -94,3 +94,72 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value_json TEXT NOT NULL DEFAULT '{}',
   updated_at INTEGER NOT NULL
 );
+
+-- notes tied to class + optional assignment, stored locally on this computer
+CREATE TABLE IF NOT EXISTS class_notes (
+  id TEXT PRIMARY KEY,
+  class_key TEXT NOT NULL,
+  assignment_key TEXT,
+  title TEXT NOT NULL,
+  content_md TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'pasted',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_class_notes_class_updated ON class_notes(class_key, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_class_notes_assignment_updated ON class_notes(assignment_key, updated_at DESC);
+
+
+-- local calendar events + reminders
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  start_at INTEGER NOT NULL,
+  end_at INTEGER,
+  reminder_minutes INTEGER NOT NULL DEFAULT 30,
+  reminder_dismissed INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events(start_at);
+
+
+-- local inbox cache + generated outputs
+CREATE TABLE IF NOT EXISTS inbox_messages (
+  id TEXT PRIMARY KEY,
+  from_name TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body_text TEXT NOT NULL,
+  triage_label TEXT NOT NULL DEFAULT '',
+  is_pinned INTEGER NOT NULL DEFAULT 0,
+  archived_at INTEGER,
+  received_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_inbox_received ON inbox_messages(received_at DESC);
+
+CREATE TABLE IF NOT EXISTS inbox_outputs (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL, -- summary | draft
+  target_message_id TEXT,
+  content_text TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY(target_message_id) REFERENCES inbox_messages(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inbox_outputs_kind_created ON inbox_outputs(kind, created_at DESC);
+
+-- class information managed per semester
+CREATE TABLE IF NOT EXISTS class_profiles (
+  id TEXT PRIMARY KEY,
+  semester_key TEXT NOT NULL,
+  class_code TEXT NOT NULL,
+  class_name TEXT NOT NULL,
+  instructor TEXT,
+  meeting_schedule TEXT,
+  location TEXT,
+  notes_md TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_class_profiles_semester ON class_profiles(semester_key, class_code);

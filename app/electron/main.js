@@ -10,6 +10,7 @@ const { WeatherAgent, WebSummaryAgent, CalendarAgent, EmailScanAgent } = require
 const { registerIpc } = require('../src/backend/ipc/handlers');
 const { TelegramSenderAgent } = require('../src/backend/agents/telegram_sender');
 const { DailyScheduler } = require('../src/backend/scheduler/daily');
+const { OutboxSyncWorker } = require('../src/backend/sync/worker');
 const { NoteSummarizerAgent, NoteFlashcardMakerAgent, NoteTaskExtractorAgent } = require('../src/backend/agents/note_tools');
 
 let db;
@@ -21,7 +22,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: 'Bob Assistant',
+    title: 'JARVIS',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

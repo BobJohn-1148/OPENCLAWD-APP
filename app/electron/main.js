@@ -11,6 +11,7 @@ const { registerIpc } = require('../src/backend/ipc/handlers');
 const { TelegramSenderAgent } = require('../src/backend/agents/telegram_sender');
 const { DailyScheduler } = require('../src/backend/scheduler/daily');
 const { OutboxSyncWorker } = require('../src/backend/sync/worker');
+const { NoteSummarizerAgent, NoteFlashcardMakerAgent, NoteTaskExtractorAgent } = require('../src/backend/agents/note_tools');
 
 let db;
 let registry;
@@ -48,6 +49,9 @@ app.whenReady().then(() => {
   registry.register(CalendarAgent);
   registry.register(EmailScanAgent);
   registry.register(TelegramSenderAgent);
+  registry.register(NoteSummarizerAgent);
+  registry.register(NoteFlashcardMakerAgent);
+  registry.register(NoteTaskExtractorAgent);
 
   dispatcher = new Dispatcher({ db, registry, intervalMs: 300 });
   dispatcher.start();

@@ -344,6 +344,356 @@ function TelegramSettings() {
   );
 }
 
+
+function AssignmentsNotesPage() {
+  const [classKey, setClassKey] = useState('');
+  const [assignmentKey, setAssignmentKey] = useState('');
+  const [title, setTitle] = useState('');
+  const [contentMd, setContentMd] = useState('');
+  const [items, setItems] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [dashboard, setDashboard] = useState({ totalNotes: 0, classCount: 0, assignmentCount: 0, topClasses: [] });
+  const [vaultPath, setVaultPath] = useState('');
+  const [vaultEnabled, setVaultEnabled] = useState(false);
+  const [status, setStatus] = useState('');
+
+  async function refreshGroups() {
+    const rows = await window.bob?.notesClasses?.();
+    const next = rows || [];
+    setGroups(next);
+    if (!classKey && next[0]?.class_key) {
+      setClassKey(next[0].class_key);
+      setAssignmentKey('');
+    }
+  }
+
+  async function refreshDashboard() {
+    const d = await window.bob?.notesDashboard?.();
+    if (d) setDashboard(d);
+  }
+
+  async function refreshNotes({ nextClassKey, nextAssignmentKey } = {}) {
+    const c = typeof nextClassKey === 'string' ? nextClassKey : classKey;
+    const a = typeof nextAssignmentKey === 'string' ? nextAssignmentKey : assignmentKey;
+    const rows = await window.bob?.notesList?.({ classKey: c, assignmentKey: a || undefined, limit: 250 });
+    const next = rows || [];
+    setItems(next);
+    setSelectedId((prev) => (next.some((x) => x.id === prev) ? prev : (next[0]?.id || null)));
+  }
+
+  useEffect(() => {
+    (async () => {
+      const cfg = await window.bob?.notesObsidianGetConfig?.();
+      if (cfg) {
+        setVaultPath(cfg.vaultPath || '');
+        setVaultEnabled(Boolean(cfg.enabled));
+      }
+      await refreshGroups();
+      await refreshDashboard();
+      await refreshNotes();
+    })();
+  }, []);
+
+  useEffect(() => {
+    refreshNotes();
+  }, [classKey, assignmentKey]);
+
+  const selected = items.find((x) => x.id === selectedId) || null;
+
+  return (
+    <div className="notesPageLayout">
+      <div className="card glass notesNav">
+        <div className="cardHeader">
+          <div className="cardTitle">Classes</div>
+        </div>
+        <div className="cardBody notesNavBody">
+          {Array.from(new Set(groups.map((g) => g.class_key))).map((klass) => (
+            <div key={klass} className="notesClassBlock">
+              <button
+                className={`notesClassBtn ${classKey === klass && !assignmentKey ? 'active' : ''}`}
+                onClick={() => {
+                  setClassKey(klass);
+                  setAssignmentKey('');
+                }}
+              >
+                {klass}
+              </button>
+              <div className="notesClassAssignments">
+                {groups
+                  .filter((g) => g.class_key === klass && g.assignment_key)
+                  .map((g) => (
+                    <button
+                      key={`${g.class_key}_${g.assignment_key}`}
+                      className={`notesAssignmentBtn ${classKey === g.class_key && assignmentKey === g.assignment_key ? 'active' : ''}`}
+                      onClick={() => {
+                        setClassKey(g.class_key);
+                        setAssignmentKey(g.assignment_key);
+                      }}
+                    >
+                      {g.assignment_key} <span className="tiny">({g.note_count})</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          ))}
+          {groups.length === 0 ? <div className="tiny" style={{ color: 'var(--muted)' }}>No saved classes yet.</div> : null}
+        </div>
+      </div>
+
+      <div className="dashboardLeft">
+        <GlassCard title="Class Dashboard">
+          <div className="kv notesStatsKv">
+            <div className="k">Total Notes</div><div className="v">{dashboard.totalNotes}</div>
+            <div className="k">Classes</div><div className="v">{dashboard.classCount}</div>
+            <div className="k">Assignments</div><div className="v">{dashboard.assignmentCount}</div>
+            <div className="k">Last Update</div><div className="v">{dashboard.lastUpdated ? formatAbsolute(dashboard.lastUpdated) : '—'}</div>
+          </div>
+          <div className="tiny" style={{ color: 'var(--muted)', marginTop: 10, marginBottom: 6 }}>Top classes by note count</div>
+          <div className="notesTopClasses">
+            {(dashboard.topClasses || []).map((x) => (
+              <button key={x.class_key} className="notesClassBtn" onClick={() => { setClassKey(x.class_key); setAssignmentKey(''); }}>
+                {x.class_key} <span className="tiny">({x.note_count})</span>
+              </button>
+            ))}
+          </div>
+        </GlassCard>
+
+        <GlassCard title="Obsidian Vault Import">
+          <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
+            Import Markdown notes from a local Obsidian vault. First folder level becomes Class, second level can map to Assignment.
+          </div>
+          <label className="tiny" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <input type="checkbox" checked={vaultEnabled} onChange={(e) => setVaultEnabled(e.target.checked)} /> Enable Obsidian vault sync settings
+          </label>
+          <input
+            className="notesInput"
+            value={vaultPath}
+            onChange={(e) => setVaultPath(e.target.value)}
+            placeholder="C:\Users\You\Documents\ObsidianVault"
+          />
+          <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+            <button
+              className="btn"
+              onClick={async () => {
+                setStatus('Saving Obsidian config…');
+                try {
+                  await window.bob?.notesObsidianSetConfig?.({ vaultPath, enabled: vaultEnabled });
+                  setStatus('Obsidian config saved.');
+                } catch (e) {
+                  setStatus(String(e?.message || e));
+                }
+              }}
+            >
+              Save config
+            </button>
+            <button
+              className="btn"
+              onClick={async () => {
+                setStatus('Importing from vault…');
+                try {
+                  const res = await window.bob?.notesObsidianImport?.({ vaultPath });
+                  setStatus(`Imported ${res?.imported || 0} notes (${res?.scanned || 0} files scanned).`);
+                  await refreshGroups();
+                  await refreshDashboard();
+                  await refreshNotes();
+                } catch (e) {
+                  setStatus(String(e?.message || e));
+                }
+              }}
+              disabled={!vaultPath.trim()}
+            >
+              Import now
+            </button>
+          </div>
+        </GlassCard>
+
+        <GlassCard title="Paste + Save Notes">
+          <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
+            Paste notes from Obsidian (or anywhere), save locally, and open them later from class/assignment.
+          </div>
+          <div className="notesFormGrid">
+            <label className="tiny">
+              Class
+              <input
+                className="notesInput"
+                value={classKey}
+                onChange={(e) => setClassKey(e.target.value)}
+                placeholder="e.g. CS-101"
+              />
+            </label>
+            <label className="tiny">
+              Assignment (optional)
+              <input
+                className="notesInput"
+                value={assignmentKey}
+                onChange={(e) => setAssignmentKey(e.target.value)}
+                placeholder="e.g. Homework 4"
+              />
+            </label>
+            <label className="tiny" style={{ gridColumn: '1 / -1' }}>
+              Note title
+              <input className="notesInput" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Chapter 3 key formulas" />
+            </label>
+          </div>
+          <textarea
+            className="notesTextarea"
+            value={contentMd}
+            onChange={(e) => setContentMd(e.target.value)}
+            placeholder="Paste your notes here (Markdown supported)..."
+          />
+          <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+            <button
+              className="btn"
+              onClick={async () => {
+                setStatus('Saving…');
+                try {
+                  const res = await window.bob?.notesUpsert?.({
+                    classKey,
+                    assignmentKey,
+                    title,
+                    contentMd,
+                    source: 'pasted',
+                  });
+                  setContentMd('');
+                  setTitle('');
+                  setStatus('Saved locally.');
+                  await refreshGroups();
+                  await refreshDashboard();
+                  await refreshNotes({ nextClassKey: classKey, nextAssignmentKey: assignmentKey });
+                  if (res?.id) setSelectedId(res.id);
+                } catch (e) {
+                  setStatus(String(e?.message || e));
+                }
+              }}
+              disabled={!classKey.trim() || !contentMd.trim()}
+            >
+              Save note
+            </button>
+            <button className="btn" onClick={async () => { await refreshGroups(); await refreshDashboard(); await refreshNotes(); }}>Refresh notes</button>
+          </div>
+          {status ? <div className="tiny" style={{ marginTop: 10, color: 'var(--muted)' }}>{status}</div> : null}
+        </GlassCard>
+      </div>
+
+      <div className="card glass feedCard">
+        <div className="cardHeader">
+          <div className="cardTitle">
+            {classKey ? `Notes: ${classKey}` : 'Notes'}
+            {assignmentKey ? ` / ${assignmentKey}` : ''}
+          </div>
+        </div>
+        <div className="cardBody">
+          <div className="notesList">
+            {items.map((item) => (
+              <button key={item.id} className={`notesListItem ${selectedId === item.id ? 'active' : ''}`} onClick={() => setSelectedId(item.id)}>
+                <div style={{ fontWeight: 650 }}>{item.title}</div>
+                <div className="tiny" style={{ color: 'var(--muted)' }}>{item.assignment_key || 'General class note'}</div>
+                <div className="tiny" style={{ color: 'var(--muted)' }}>{formatAbsolute(item.updated_at)}</div>
+              </button>
+            ))}
+            {items.length === 0 ? <div className="tiny" style={{ color: 'var(--muted)' }}>No notes for this filter yet.</div> : null}
+          </div>
+          <div className="notesPreview">
+            {!selected ? (
+              <div className="tiny" style={{ color: 'var(--muted)' }}>Select a saved note to view it.</div>
+            ) : (
+              <>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>{selected.title}</div>
+                <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>{selected.assignment_key || 'General class note'}</div>
+                <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text)' }}>{selected.content_md}</div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotesAssistantPage() {
+  const [items, setItems] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [result, setResult] = useState('');
+  const [status, setStatus] = useState('');
+
+  async function refreshNotes() {
+    const rows = await window.bob?.notesList?.({ limit: 200 });
+    const next = rows || [];
+    setItems(next);
+    if (!selectedId && next[0]) setSelectedId(next[0].id);
+  }
+
+  useEffect(() => {
+    refreshNotes();
+  }, []);
+
+  const selected = items.find((x) => x.id === selectedId) || null;
+
+  return (
+    <div className="dashboardLayout">
+      <div className="card glass feedCard">
+        <div className="cardHeader">
+          <div className="cardTitle">Notes AI Assistant</div>
+        </div>
+        <div className="cardBody">
+          <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>
+            Subagents can summarize notes, generate flashcards, and extract tasks from your class notes.
+          </div>
+          <div className="notesList">
+            {items.map((item) => (
+              <button key={item.id} className={`notesListItem ${selectedId === item.id ? 'active' : ''}`} onClick={() => setSelectedId(item.id)}>
+                <div style={{ fontWeight: 650 }}>{item.title}</div>
+                <div className="tiny" style={{ color: 'var(--muted)' }}>{item.class_key}{item.assignment_key ? ` / ${item.assignment_key}` : ''}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="card glass feedCard">
+        <div className="cardHeader">
+          <div className="cardTitle">AI Actions</div>
+        </div>
+        <div className="cardBody">
+          {!selected ? (
+            <div className="tiny" style={{ color: 'var(--muted)' }}>Select a note first.</div>
+          ) : (
+            <>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>{selected.title}</div>
+              <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>{selected.class_key}{selected.assignment_key ? ` / ${selected.assignment_key}` : ''}</div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+                <button className="btn" onClick={async () => {
+                  setStatus('Generating summary…');
+                  const res = await window.bob?.notesAiAction?.({ action: 'summary', noteId: selected.id });
+                  setResult(res?.payload?.result || 'No result.');
+                  setStatus('Done.');
+                }}>Summarize</button>
+                <button className="btn" onClick={async () => {
+                  setStatus('Generating flashcards…');
+                  const res = await window.bob?.notesAiAction?.({ action: 'flashcards', noteId: selected.id });
+                  setResult(res?.payload?.result || 'No result.');
+                  setStatus('Done.');
+                }}>Make flashcards</button>
+                <button className="btn" onClick={async () => {
+                  setStatus('Extracting tasks…');
+                  const res = await window.bob?.notesAiAction?.({ action: 'tasks', noteId: selected.id });
+                  setResult(res?.payload?.result || 'No result.');
+                  setStatus('Done.');
+                }}>Extract tasks</button>
+              </div>
+              {status ? <div className="tiny" style={{ color: 'var(--muted)', marginBottom: 10 }}>{status}</div> : null}
+              <div className="notesPreview" style={{ minHeight: 250 }}>
+                <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text)' }}>{result || 'Run an action to see output.'}</div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -590,11 +940,11 @@ export default function App() {
       case 'inbox':
         return <GlassCard title="Inbox">Gmail viewer + summary panel coming next.</GlassCard>;
       case 'assignments':
-        return <GlassCard title="Assignments">Blackboard scrape + due-soon list coming next.</GlassCard>;
+        return <AssignmentsNotesPage />;
       case 'cron':
         return <CronJobsPage />;
       case 'assistant':
-        return <GlassCard title="Assistant">Chat UI (bubbles) connected to OpenClaw coming next.</GlassCard>;
+        return <NotesAssistantPage />;
       case 'settings':
         return (
           <div className="grid">

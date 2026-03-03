@@ -302,3 +302,125 @@ body{
 .btn:hover{ background: rgba(255,255,255,0.12); }
 .btn:disabled{ opacity:0.5; cursor:not-allowed; }
 .btn.ghost{ background: transparent; }
+
+.notesLayout{
+  grid-template-columns: 1.1fr 1fr;
+}
+
+.notesFormGrid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.notesInput{
+  width:100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+
+.notesTextarea{
+  width:100%;
+  min-height: 220px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  resize: vertical;
+}
+
+.notesList{
+  display:flex;
+  flex-direction:column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.notesListItem{
+  text-align:left;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 10px;
+  color: var(--text);
+  cursor:pointer;
+}
+
+.notesListItem.active{
+  border-color: rgba(56,189,248,0.55);
+  box-shadow: 0 0 0 1px rgba(56,189,248,0.25);
+}
+
+.notesPreview{
+  border-top: 1px solid rgba(255,255,255,0.12);
+  padding-top: 10px;
+}
+
+.notesPageLayout{
+  width:100%;
+  display:grid;
+  grid-template-columns: 260px 1.1fr 1fr;
+  gap: 14px;
+}
+
+.notesNav{
+  display:flex;
+  flex-direction:column;
+}
+
+.notesNavBody{
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+  overflow:auto;
+}
+
+.notesClassBlock{
+  display:flex;
+  flex-direction:column;
+  gap: 6px;
+}
+
+.notesClassBtn,
+.notesAssignmentBtn{
+  text-align:left;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor:pointer;
+}
+
+.notesAssignmentBtn{
+  margin-left: 10px;
+  font-size: 13px;
+}
+
+.notesClassBtn.active,
+.notesAssignmentBtn.active{
+  border-color: rgba(56,189,248,0.55);
+  box-shadow: 0 0 0 1px rgba(56,189,248,0.25);
+}
+
+.notesClassAssignments{
+  display:flex;
+  flex-direction:column;
+  gap: 6px;
+}
+
+.notesStatsKv{
+  grid-template-columns: 130px 1fr;
+}
+
+.notesTopClasses{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}

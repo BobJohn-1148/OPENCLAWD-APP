@@ -1,12 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const http = require('http');
 const crypto = require('crypto');
-const { shell } = require('electron');
 const { emitEvent } = require('../eventBus/bus');
 const { getLatestBrief } = require('../brief/store');
 const { ensureAgentRow, setAgentConfig, getAgentConfig } = require('./settings');
-const { getAppSetting, setAppSetting } = require('../sync/outbox');
+const { syncOutboxOnce, getAppSetting, setAppSetting } = require('../sync/outbox');
+const { makeId } = require('../util/ids');
+const { nowTs } = require('../util/time');
 
 function registerIpc({ ipcMain, db, registry }) {
   ensureInboxSchema(db);
@@ -25,6 +25,18 @@ function registerIpc({ ipcMain, db, registry }) {
       ...r,
       details: safeJson(r.details_json),
     }));
+  });
+
+
+  ipcMain.handle('db:clearAudit', async () => {
+    const deleted = db.prepare('DELETE FROM audit_log').run().changes;
+    registry.audit('audit.cleared', { deleted }, 'ui');
+    return { ok: true, deleted };
+  });
+
+  ipcMain.handle('db:getAuditStats', async () => {
+    const row = db.prepare('SELECT COUNT(*) as total, MAX(created_at) as latestTs FROM audit_log').get();
+    return { total: row?.total || 0, latestTs: row?.latestTs || null };
   });
 
   ipcMain.handle('brief:requestMorning', async () => {
@@ -53,7 +65,7 @@ function registerIpc({ ipcMain, db, registry }) {
   ipcMain.handle('telegram:sendTest', async () => {
     const brief = (getLatestBrief(db)?.brief) || {
       title: 'Morning Brief (test)',
-      blocks: [{ kind: 'info', text: 'This is a test message from Bob Assistant.' }],
+      blocks: [{ kind: 'info', text: 'This is a test message from JARVIS.' }],
     };
     emitEvent(db, { type: 'telegram.test_send', source_agent_key: 'ui', target_agent_key: 'telegram_sender', payload: { brief } });
     return { ok: true };
@@ -721,20 +733,82 @@ ${msg.body_text}`.toLowerCase();
       });
   });
 
+
+  // Local class notes
+  ipcMain.handle('notes:list', async (_evt, { classKey, assignmentKey, limit = 200 } = {}) => {
+    const classFilter = typeof classKey === 'string' ? classKey.trim() : '';
+    const assignmentFilter = typeof assignmentKey === 'string' ? assignmentKey.trim() : '';
+    const safeLimit = Math.min(500, Math.max(1, Number(limit) || 200));
+    let rows;
+    if (classFilter && assignmentFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE class_key = ? AND assignment_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(classFilter, assignmentFilter, safeLimit);
+    } else if (classFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE class_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(classFilter, safeLimit);
+    } else if (assignmentFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE assignment_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(assignmentFilter, safeLimit);
+    } else {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes ORDER BY updated_at DESC LIMIT ?')
+        .all(safeLimit);
+    }
+    return rows;
+  });
+
+  ipcMain.handle('notes:classes', async () => {
+    const rows = db
+      .prepare(`
+        SELECT
+          class_key,
+          assignment_key,
+          COUNT(*) AS note_count,
+          MAX(updated_at) AS updated_at
+        FROM class_notes
+        GROUP BY class_key, assignment_key
+        ORDER BY class_key ASC, updated_at DESC
+      `)
+      .all();
+    return rows;
+  });
+
+  ipcMain.handle('notes:upsert', async (_evt, { id, classKey, assignmentKey, title, contentMd, source } = {}) => {
+    const class_key = typeof classKey === 'string' ? classKey.trim() : '';
+    const titleSafe = typeof title === 'string' && title.trim() ? title.trim() : 'Untitled note';
+    const content_md = typeof contentMd === 'string' ? contentMd : '';
+    if (!class_key) throw new Error('class is required');
+    if (!content_md.trim()) throw new Error('note content is required');
+
+    const now = Date.now();
+    const noteId = (typeof id === 'string' && id.trim()) || `note_${now}_${Math.random().toString(36).slice(2, 8)}`;
+    const assignment_key = typeof assignmentKey === 'string' && assignmentKey.trim() ? assignmentKey.trim() : null;
+    const src = typeof source === 'string' && source.trim() ? source.trim() : 'pasted';
+
+    db.prepare(`
+      INSERT INTO class_notes (id, class_key, assignment_key, title, content_md, source, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        class_key=excluded.class_key,
+        assignment_key=excluded.assignment_key,
+        title=excluded.title,
+        content_md=excluded.content_md,
+        source=excluded.source,
+        updated_at=excluded.updated_at
+    `).run(noteId, class_key, assignment_key, titleSafe, content_md, src, now, now);
+
+    registry.audit('notes.upserted', { id: noteId, classKey: class_key, assignmentKey: assignment_key }, 'ui');
+    return { ok: true, id: noteId };
+  });
   ipcMain.handle('outbox:list', async (_evt, { limit = 50 } = {}) => {
     const rows = db
       .prepare('SELECT id, job, title, body_md, created_at, received_at, status FROM outbox_items ORDER BY created_at DESC LIMIT ?')
       .all(Math.min(200, Math.max(1, limit)));
     return rows;
   });
-}
-
-function ensureInboxSchema(db) {
-  const columns = db.prepare('PRAGMA table_info(inbox_messages)').all();
-  const has = (name) => columns.some((c) => c.name === name);
-  if (!has('triage_label')) db.prepare("ALTER TABLE inbox_messages ADD COLUMN triage_label TEXT NOT NULL DEFAULT ''").run();
-  if (!has('is_pinned')) db.prepare('ALTER TABLE inbox_messages ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0').run();
-  if (!has('archived_at')) db.prepare('ALTER TABLE inbox_messages ADD COLUMN archived_at INTEGER').run();
 }
 
 function walkMarkdown(root) {
@@ -771,84 +845,16 @@ function safeJson(s) {
   }
 }
 
-
-function base64url(buf) {
-  return Buffer.from(buf).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+function normalizeStatus(status) {
+  const val = String(status || '').toLowerCase();
+  if (val === 'todo' || val === 'doing' || val === 'done') return val;
+  throw new Error('invalid status');
 }
 
-async function waitForGoogleAuthCode({ expectedState, port, urlToOpen, timeoutMs = 180000 }) {
-  return new Promise(async (resolve, reject) => {
-    let settled = false;
-    const done = (err, code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try { server.close(); } catch {}
-      if (err) reject(err);
-      else resolve(code);
-    };
-
-    const server = http.createServer((req, res) => {
-      try {
-        const u = new URL(req.url, `http://127.0.0.1:${port}`);
-        if (u.pathname !== '/oauth2callback') {
-          res.statusCode = 404;
-          res.end('Not found');
-          return;
-        }
-        const state = u.searchParams.get('state') || '';
-        const code = u.searchParams.get('code') || '';
-        if (state !== expectedState || !code) {
-          res.statusCode = 400;
-          res.end('Invalid OAuth response.');
-          done(new Error('invalid oauth callback'));
-          return;
-        }
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'text/html');
-        res.end('<html><body style="font-family:sans-serif;padding:24px">Connected. You can close this window and return to Bob Assistant.</body></html>');
-        done(null, code);
-      } catch (e) {
-        done(e);
-      }
-    });
-
-    server.listen(port, '127.0.0.1', async () => {
-      try {
-        await shell.openExternal(urlToOpen);
-      } catch {}
-    });
-
-    const timer = setTimeout(() => done(new Error('google auth timed out')), timeoutMs);
-  });
-}
-
-async function ensureGoogleAccessToken({ db }) {
-  const cfg = getAppSetting(db, 'google_oauth_config') || { clientId: '' };
-  const tok = getAppSetting(db, 'google_oauth_tokens') || {};
-  if (!cfg.clientId) return null;
-  if (tok.access_token && Number(tok.expires_at || 0) > Date.now() + 15000) return tok.access_token;
-  if (!tok.refresh_token) return tok.access_token || null;
-
-  const resp = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: cfg.clientId,
-      grant_type: 'refresh_token',
-      refresh_token: tok.refresh_token,
-    }),
-  });
-  const json = await resp.json();
-  if (!resp.ok) return null;
-  const next = {
-    ...tok,
-    access_token: json.access_token || tok.access_token || '',
-    expires_at: Date.now() + (Number(json.expires_in || 3600) * 1000),
-    token_type: json.token_type || tok.token_type || 'Bearer',
-  };
-  setAppSetting(db, 'google_oauth_tokens', next);
-  return next.access_token;
+function normalizePriority(priority) {
+  const val = String(priority || '').toLowerCase();
+  if (val === 'low' || val === 'medium' || val === 'high') return val;
+  throw new Error('invalid priority');
 }
 
 module.exports = { registerIpc };

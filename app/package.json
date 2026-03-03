@@ -2,7 +2,7 @@
   "name": "bob-assistant",
   "version": "0.1.0",
   "private": true,
-  "description": "Bob Assistant - Windows desktop personal assistant",
+  "description": "JARVIS - Windows desktop personal assistant",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -15,8 +15,7 @@
     "dist:win": "npm run build && electron-builder --projectDir . --config.directories.app=. --win nsis --x64",
     "dist:win:dir": "npm run build && electron-builder --projectDir . --config.directories.app=. --win nsis --x64 --dir",
     "dist:win:rebuild": "npm run dist:win",
-    "installer:windows": "npm run dist:win",
-    "installer:pe": "npm run build && electron-builder --projectDir . --config.directories.app=. --win nsis portable --x64"
+    "installer:windows": "npm run dist:win"
   },
   "author": "Jack",
   "license": "UNLICENSED",

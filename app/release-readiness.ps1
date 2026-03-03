@@ -98,42 +98,26 @@ $peBat = Join-Path $appPath "build-pe-installer-windows.bat"
 if (Test-Path $installDoc) { Pass "File exists" $installDoc } else { Warn "File exists" "$installDoc (optional)" }
 if (Test-Path $peBat) { Pass "File exists" $peBat } else { Warn "File exists" "$peBat (optional)" }
 
-Write-Host "`n==> Static duplicate check (App.jsx top-level declarations)" -ForegroundColor Cyan
+Write-Host "`n==> Static duplicate check (App.jsx function declarations)" -ForegroundColor Cyan
 $appJsx = Join-Path $appPath "src\ui\App.jsx"
-$hasDuplicateTopLevel = $false
 if (Test-Path $appJsx) {
-  $lines = Get-Content -Path $appJsx
-  $topLevelFns = @()
-  foreach ($line in $lines) {
-    if ($line -match '^function\s+([A-Za-z0-9_]+)\s*\(') {
-      $topLevelFns += $Matches[1]
-    }
+  $text = Get-Content -Path $appJsx -Raw
+  $matches = [regex]::Matches($text, "function\s+([A-Za-z0-9_]+)\s*\(")
+  $names = @{}
+  foreach ($m in $matches) {
+    $n = $m.Groups[1].Value
+    if ($names.ContainsKey($n)) { $names[$n] += 1 } else { $names[$n] = 1 }
   }
-
-  $counts = @{}
-  foreach ($name in $topLevelFns) {
-    if ($counts.ContainsKey($name)) { $counts[$name] += 1 } else { $counts[$name] = 1 }
-  }
-  $dups = $counts.GetEnumerator() | Where-Object { $_.Value -gt 1 }
-
+  $dups = $names.GetEnumerator() | Where-Object { $_.Value -gt 1 }
   if ($dups) {
-    $dupList = ($dups | Sort-Object Key | ForEach-Object { "$($_.Key) x$($_.Value)" }) -join ", "
-    Fail "Duplicate top-level declarations" $dupList
-    Warn "Hint" "Open src\ui\App.jsx and remove duplicated top-level function declarations before build."
-    $hasDuplicateTopLevel = $true
+    $dupList = ($dups | ForEach-Object { "$($_.Key) x$($_.Value)" }) -join ", "
+    Fail "Duplicate function declarations" $dupList
+    Warn "Hint" "Open src\\ui\\App.jsx and remove duplicate function definitions before build."
   } else {
-    Pass "Duplicate top-level declarations" "none found"
+    Pass "Duplicate function declarations" "none found"
   }
 } else {
   Warn "App.jsx exists" "$appJsx (skipped duplicate check)"
-}
-
-if ($hasDuplicateTopLevel) {
-  Warn "Build/installer steps" "Skipped because duplicate top-level declarations were found."
-  Write-Host "`n==> Summary" -ForegroundColor Cyan
-  $results | Format-Table -AutoSize | Out-Host
-  Write-Host "Release readiness: NOT READY" -ForegroundColor Red
-  exit 1
 }
 
 Write-Host "`n==> Install/build/test" -ForegroundColor Cyan

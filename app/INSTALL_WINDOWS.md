@@ -7,7 +7,7 @@ This app is now configured for **Windows 11 installer builds** with Electron Bui
 On a Windows 11 machine:
 
 1. Open the `app/` folder.
-2. Double-click `build-pe-installer-windows.bat` (or `build-installer-windows.bat`).
+2. Double-click `build-installer-windows.bat`.
 3. Wait for it to finish.
 4. Grab the installer from `app\release\`.
 
@@ -21,8 +21,6 @@ On a Windows 11 machine:
 ```bash
 npm install
 npm run installer:windows
-# or explicitly produce Windows PE .exe artifacts
-npm run installer:pe
 ```
 
 ## Optional: rebuild native deps only
@@ -40,10 +38,3 @@ This project uses `better-sqlite3` (native module). For a working Windows app, b
 The app stores local data at:
 
 - `%APPDATA%\BobAssistant\bob.db`
-
-
-## PE installer details
-
-Both generated `.exe` artifacts are Windows PE executables:
-- NSIS one-click installer (`Bob Assistant-<version>-x64.exe`)
-- Portable executable (`Bob Assistant-<version>-x64-portable.exe`)

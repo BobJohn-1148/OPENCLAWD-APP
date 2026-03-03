@@ -2,8 +2,7 @@ const { emitEvent } = require('../eventBus/bus');
 const { getLatestBrief } = require('../brief/store');
 const { ensureAgentRow, setAgentConfig, getAgentConfig } = require('./settings');
 const { syncOutboxOnce, getAppSetting, setAppSetting } = require('../sync/outbox');
-const { makeId } = require('../util/ids');
-const { nowTs } = require('../util/time');
+const { id } = require('../util/ids');
 
 function registerIpc({ ipcMain, db, registry }) {
   // Ensure important agents exist in DB
@@ -108,9 +107,9 @@ function registerIpc({ ipcMain, db, registry }) {
     const priority = payload.priority == null ? 'medium' : normalizePriority(payload.priority);
     const owner = typeof payload.owner === 'string' && payload.owner.trim() ? payload.owner.trim() : 'openclawd-bot';
 
-    const ts = nowTs();
+    const ts = Date.now();
     const row = {
-      id: makeId('task'),
+      id: id('task'),
       title,
       description,
       status: 'todo',
@@ -141,7 +140,7 @@ function registerIpc({ ipcMain, db, registry }) {
     const status = payload.status == null ? existing.status : normalizeStatus(payload.status);
     const owner = typeof payload.owner === 'string' && payload.owner.trim() ? payload.owner.trim() : existing.owner;
 
-    const ts = nowTs();
+    const ts = Date.now();
     const completedAt = status === 'done' ? (existing.completed_at || ts) : null;
 
     const row = {

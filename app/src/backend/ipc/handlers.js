@@ -86,6 +86,44 @@ function registerIpc({ ipcMain, db, registry }) {
   });
 
 
+  // Local class notes
+  ipcMain.handle('notes:list', async (_evt, { classKey, assignmentKey, limit = 200 } = {}) => {
+    const classFilter = typeof classKey === 'string' ? classKey.trim() : '';
+    const assignmentFilter = typeof assignmentKey === 'string' ? assignmentKey.trim() : '';
+    const safeLimit = Math.min(500, Math.max(1, Number(limit) || 200));
+    let rows;
+    if (classFilter && assignmentFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE class_key = ? AND assignment_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(classFilter, assignmentFilter, safeLimit);
+    } else if (classFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE class_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(classFilter, safeLimit);
+    } else if (assignmentFilter) {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes WHERE assignment_key = ? ORDER BY updated_at DESC LIMIT ?')
+        .all(assignmentFilter, safeLimit);
+    } else {
+      rows = db
+        .prepare('SELECT id, class_key, assignment_key, title, content_md, source, created_at, updated_at FROM class_notes ORDER BY updated_at DESC LIMIT ?')
+        .all(safeLimit);
+    }
+    return rows;
+  });
+
+  ipcMain.handle('notes:classes', async () => {
+    const rows = db
+      .prepare(`
+        SELECT
+          class_key,
+          assignment_key,
+          COUNT(*) AS note_count,
+          MAX(updated_at) AS updated_at
+        FROM class_notes
+        GROUP BY class_key, assignment_key
+        ORDER BY class_key ASC, updated_at DESC
+      `)
 
   // Task board
   ipcMain.handle('tasks:list', async () => {

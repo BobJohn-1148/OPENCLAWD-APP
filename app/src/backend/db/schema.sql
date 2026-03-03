@@ -95,6 +95,19 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at INTEGER NOT NULL
 );
 
+-- notes tied to class + optional assignment, stored locally on this computer
+CREATE TABLE IF NOT EXISTS class_notes (
+  id TEXT PRIMARY KEY,
+  class_key TEXT NOT NULL,
+  assignment_key TEXT,
+  title TEXT NOT NULL,
+  content_md TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'pasted',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_class_notes_class_updated ON class_notes(class_key, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_class_notes_assignment_updated ON class_notes(assignment_key, updated_at DESC);
 -- Task board items for planning and OpenClawd execution flow
 CREATE TABLE IF NOT EXISTS task_board_items (
   id TEXT PRIMARY KEY,

@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('bob', {
   syncRunOnce: () => ipcRenderer.invoke('sync:runOnce'),
   outboxList: (opts) => ipcRenderer.invoke('outbox:list', opts),
 
+  // Notes
+  notesList: (opts) => ipcRenderer.invoke('notes:list', opts),
+  notesClasses: () => ipcRenderer.invoke('notes:classes'),
+  notesUpsert: (payload) => ipcRenderer.invoke('notes:upsert', payload),
   // Task board
   tasksList: () => ipcRenderer.invoke('tasks:list'),
   tasksCreate: (payload) => ipcRenderer.invoke('tasks:create', payload),
